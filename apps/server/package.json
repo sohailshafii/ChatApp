@@ -7,13 +7,18 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "migrate": "tsx src/db/migrate.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@chatapp/shared": "*"
+    "@chatapp/shared": "*",
+    "argon2": "^0.41.1",
+    "fastify": "^5.2.0",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/node": "^20.12.0",
+    "@types/pg": "^8.11.10",
     "tsx": "^4.7.0"
   }
 }
