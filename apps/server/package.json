@@ -1,0 +1,19 @@
+{
+  "name": "@chatapp/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@chatapp/shared": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "tsx": "^4.7.0"
+  }
+}
