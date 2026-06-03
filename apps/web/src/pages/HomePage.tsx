@@ -8,7 +8,8 @@ export function HomePage() {
       <h1>Welcome to ChatApp</h1>
       <p>A simple, fast place to chat.</p>
       <p>
-        <Link to="/signup">Create an account</Link>
+        <Link to="/signup">Create an account</Link> or{' '}
+        <Link to="/login">log in</Link>.
       </p>
     </section>
   );

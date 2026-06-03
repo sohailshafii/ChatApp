@@ -1,4 +1,4 @@
-import type { SignupRequest } from '@chatapp/shared';
+import type { LoginRequest, LoginResponse, SignupRequest } from '@chatapp/shared';
 import { apiFetch } from './client';
 
 // Auth endpoints (REQUIREMENTS.md §1). More will be added as login,
@@ -12,4 +12,14 @@ import { apiFetch } from './client';
  */
 export async function signup(input: SignupRequest): Promise<void> {
   await apiFetch<void>('/auth/signup', { method: 'POST', body: input });
+}
+
+/**
+ * POST /auth/login — exchanges username + password for a session cookie
+ * (set by the server) and returns the authenticated account. Throws `ApiError`
+ * with `invalid_credentials`, `unverified` (account exists but email not
+ * confirmed), `rate_limited`, or `validation_error`.
+ */
+export async function login(input: LoginRequest): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>('/auth/login', { method: 'POST', body: input });
 }

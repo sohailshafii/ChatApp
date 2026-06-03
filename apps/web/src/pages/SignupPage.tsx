@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { signupRequestSchema } from '@chatapp/shared';
 import { ApiError } from '../api/client';
 import { signup } from '../api/auth';
+import { Field } from '../components/Field';
 
 type FieldName = 'username' | 'email' | 'password';
 type FieldErrors = Partial<Record<FieldName, string>>;
@@ -152,58 +153,6 @@ export function SignupPage() {
         Already have an account? <Link to="/login">Log in</Link>
       </p>
     </section>
-  );
-}
-
-interface FieldProps {
-  id: FieldName;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  error?: string;
-  hint?: string;
-  type?: string;
-  autoComplete?: string;
-}
-
-function Field({
-  id,
-  label,
-  value,
-  onChange,
-  error,
-  hint,
-  type = 'text',
-  autoComplete,
-}: FieldProps) {
-  const hintId = hint ? `${id}-hint` : undefined;
-  const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
-
-  return (
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
-      {hint && (
-        <span id={hintId} className="field-hint">
-          {hint}
-        </span>
-      )}
-      <input
-        id={id}
-        name={id}
-        type={type}
-        value={value}
-        autoComplete={autoComplete}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {error && (
-        <span id={errorId} className="field-error" role="alert">
-          {error}
-        </span>
-      )}
-    </div>
   );
 }
 
