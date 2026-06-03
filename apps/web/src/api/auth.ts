@@ -42,3 +42,21 @@ export async function getMe(): Promise<MeResponse> {
 export async function logout(): Promise<void> {
   await apiFetch<void>('/auth/logout', { method: 'POST' });
 }
+
+/**
+ * POST /auth/verify-email — consumes a one-time verification token (§1).
+ * Resolves on success; throws `ApiError` with `invalid_token` / `expired_token`
+ * (24h expiry) or `rate_limited`.
+ */
+export async function verifyEmail(token: string): Promise<void> {
+  await apiFetch<void>('/auth/verify-email', { method: 'POST', body: { token } });
+}
+
+/**
+ * POST /auth/verify-email/resend — requests a fresh verification link for an
+ * email. The server responds generically to avoid revealing whether the
+ * address has a pending account; throws `ApiError` only on `rate_limited`.
+ */
+export async function resendVerification(email: string): Promise<void> {
+  await apiFetch<void>('/auth/verify-email/resend', { method: 'POST', body: { email } });
+}

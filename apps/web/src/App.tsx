@@ -4,6 +4,8 @@ import { RequireAuth, RedirectIfAuthed } from './auth/guards';
 import { HomePage } from './pages/HomePage';
 import { SignupPage } from './pages/SignupPage';
 import { LoginPage } from './pages/LoginPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
+import { ResendVerificationPage } from './pages/ResendVerificationPage';
 import { Placeholder } from './pages/Placeholder';
 
 export function App() {
@@ -21,11 +23,9 @@ export function App() {
           <Route path="signup" element={<SignupPage />} />
         </Route>
 
-        {/* Public recovery flows (stubs for now). */}
-        <Route
-          path="verify-email/resend"
-          element={<Placeholder title="Resend verification email" />}
-        />
+        {/* Public auth flows (reachable logged in or out). */}
+        <Route path="verify-email" element={<VerifyEmailPage />} />
+        <Route path="verify-email/resend" element={<ResendVerificationPage />} />
         <Route
           path="password-reset"
           element={<Placeholder title="Reset your password" />}
