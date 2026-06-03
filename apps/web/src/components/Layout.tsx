@@ -1,8 +1,17 @@
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 
-// App shell: a header band plus the routed page content. Intentionally minimal
-// for v1 — the conversation UI will grow inside this frame later.
+// App shell: a header band plus the routed page content. The header carries
+// the account controls (username + log out, or a log in link) once auth resolves.
 export function Layout() {
+  const { status, user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await logout();
+    navigate('/login', { replace: true });
+  }
+
   return (
     <div className="app-shell">
       <a href="#main" className="skip-link">
@@ -12,6 +21,17 @@ export function Layout() {
         <Link to="/" className="app-logo">
           ChatApp
         </Link>
+        <nav className="app-nav" aria-label="Account">
+          {status === 'authenticated' && user && (
+            <>
+              <span className="app-user">{user.username}</span>
+              <button type="button" className="btn-link" onClick={handleLogout}>
+                Log out
+              </button>
+            </>
+          )}
+          {status === 'unauthenticated' && <Link to="/login">Log in</Link>}
+        </nav>
       </header>
       <main id="main" className="app-main">
         <Outlet />

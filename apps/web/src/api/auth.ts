@@ -1,4 +1,9 @@
-import type { LoginRequest, LoginResponse, SignupRequest } from '@chatapp/shared';
+import type {
+  LoginRequest,
+  LoginResponse,
+  MeResponse,
+  SignupRequest,
+} from '@chatapp/shared';
 import { apiFetch } from './client';
 
 // Auth endpoints (REQUIREMENTS.md §1). More will be added as login,
@@ -22,4 +27,18 @@ export async function signup(input: SignupRequest): Promise<void> {
  */
 export async function login(input: LoginRequest): Promise<LoginResponse> {
   return apiFetch<LoginResponse>('/auth/login', { method: 'POST', body: input });
+}
+
+/**
+ * GET /auth/me — returns the authenticated account, or throws `ApiError`
+ * with `unauthorized` (status 401) when there is no valid session. Used to
+ * rehydrate auth state on app load.
+ */
+export async function getMe(): Promise<MeResponse> {
+  return apiFetch<MeResponse>('/auth/me');
+}
+
+/** POST /auth/logout — deletes the session server-side and clears the cookie. */
+export async function logout(): Promise<void> {
+  await apiFetch<void>('/auth/logout', { method: 'POST' });
 }

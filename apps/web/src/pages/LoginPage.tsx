@@ -4,6 +4,7 @@ import { loginRequestSchema } from '@chatapp/shared';
 import { ApiError } from '../api/client';
 import { login } from '../api/auth';
 import { Field } from '../components/Field';
+import { useAuth } from '../auth/AuthContext';
 
 type FieldName = 'username' | 'password';
 type FieldErrors = Partial<Record<FieldName, string>>;
@@ -17,6 +18,7 @@ function isFieldName(value: unknown): value is FieldName {
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { setUser } = useAuth();
   // Where to land after login: the page the user was sent here from, or home.
   const from = (location.state as { from?: string } | null)?.from ?? '/';
 
@@ -54,7 +56,8 @@ export function LoginPage() {
 
     setSubmitting(true);
     try {
-      await login(parsed.data);
+      const { user } = await login(parsed.data);
+      setUser(user);
       navigate(from, { replace: true });
     } catch (err) {
       applyLoginError(err, setFormError, setUnverified);
