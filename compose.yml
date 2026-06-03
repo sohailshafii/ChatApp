@@ -1,3 +1,9 @@
+# Pinned project name so `db:up`/`db:down`/`db:reset` target the same Compose
+# project regardless of the working directory (the project name otherwise
+# defaults to the dir name, which differs across git worktrees — see the
+# parallel-agent worktree workflow in the root CLAUDE.md).
+name: chatapp
+
 services:
   postgres:
     image: postgres:16-alpine
