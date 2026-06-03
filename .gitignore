@@ -26,3 +26,6 @@ Thumbs.db
 
 # Local scratch
 notes.txt
+
+# Claude Code local (session/worktree scratch; tracked CLAUDE.md files are unaffected)
+.claude/
