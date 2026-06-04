@@ -17,6 +17,11 @@ export function App() {
         {/* Requires a session. */}
         <Route element={<RequireAuth />}>
           <Route index element={<HomePage />} />
+          {/* Conversation detail view is a later slice. */}
+          <Route
+            path="conversations/:id"
+            element={<Placeholder title="Conversation" />}
+          />
         </Route>
 
         {/* Guest-only: authenticated users are bounced home. */}

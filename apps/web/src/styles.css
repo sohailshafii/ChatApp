@@ -80,8 +80,82 @@ a {
   text-decoration: underline;
 }
 
-.loading {
+.loading,
+.empty {
   color: var(--color-muted);
+}
+
+/* Conversation list (§2) */
+.conversation-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.conversation-item {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  text-decoration: none;
+  color: inherit;
+}
+
+.conversation-item:hover {
+  background: #f5f5f5;
+}
+
+.conversation-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0; /* allow the preview to truncate */
+  flex: 1;
+}
+
+.conversation-peer {
+  font-weight: 600;
+}
+
+.conversation-item.is-unread .conversation-peer {
+  font-weight: 700;
+}
+
+.conversation-preview {
+  color: var(--color-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conversation-item.is-unread .conversation-preview {
+  color: var(--color-text);
+}
+
+.conversation-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.conversation-time {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.unread-badge {
+  min-width: 1.25rem;
+  padding: 0 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  text-align: center;
+  color: #fff;
+  background: var(--color-accent);
+  border-radius: 999px;
 }
 
 .app-main {
