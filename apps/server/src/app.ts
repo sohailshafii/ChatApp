@@ -3,6 +3,7 @@ import fastifyCookie from '@fastify/cookie';
 import { loadConfig } from './config.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerConversationRoutes } from './routes/conversations.js';
 
 // Builds the Fastify instance with routes registered but without listening, so
 // it can be reused by the entrypoint and (later) by tests.
@@ -22,6 +23,7 @@ export function buildApp(): FastifyInstance {
 
   registerHealthRoutes(app);
   registerAuthRoutes(app);
+  registerConversationRoutes(app);
 
   return app;
 }
