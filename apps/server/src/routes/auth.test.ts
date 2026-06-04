@@ -31,7 +31,7 @@ afterAll(async () => {
 
 afterEach(async () => {
   await query(
-    'TRUNCATE accounts, sessions, email_verification_tokens RESTART IDENTITY CASCADE',
+    'TRUNCATE accounts, sessions, email_verification_tokens, password_reset_tokens RESTART IDENTITY CASCADE',
   );
 });
 
@@ -377,5 +377,140 @@ describe('POST /auth/verify-email/resend', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(await tokenCount(id)).toBe(0);
+  });
+});
+
+async function insertPasswordResetToken(
+  accountId: string,
+  { expired = false } = {},
+): Promise<string> {
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + (expired ? -60_000 : 60_000));
+  await query(
+    `INSERT INTO password_reset_tokens (token_hash, account_id, expires_at)
+     VALUES ($1, $2, $3)`,
+    [token.hash, accountId, expiresAt],
+  );
+  return token.raw;
+}
+
+async function resetTokenCount(accountId: string): Promise<number> {
+  const { rows } = await query<{ count: string }>(
+    'SELECT count(*)::text AS count FROM password_reset_tokens WHERE account_id = $1',
+    [accountId],
+  );
+  return Number(rows[0]?.count ?? '0');
+}
+
+describe('POST /auth/password-reset/request', () => {
+  it('issues a reset token for a username identifier', async () => {
+    await createVerifiedUser();
+    const id = await accountIdByUsername();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/password-reset/request',
+      payload: { identifier: 'alice' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(await resetTokenCount(id)).toBe(1);
+  });
+
+  it('issues a reset token for an email identifier', async () => {
+    await createVerifiedUser();
+    const id = await accountIdByUsername();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/password-reset/request',
+      payload: { identifier: 'alice@example.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(await resetTokenCount(id)).toBe(1);
+  });
+
+  it('returns a generic 200 for an unknown identifier, creating nothing', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/password-reset/request',
+      payload: { identifier: 'ghost' },
+    });
+    expect(res.statusCode).toBe(200);
+    const { rows } = await query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM password_reset_tokens',
+    );
+    expect(rows[0]?.count).toBe('0');
+  });
+});
+
+describe('POST /auth/password-reset/confirm', () => {
+  const NEW_PASSWORD = 'a brand new passphrase';
+
+  it('sets the new password, kills sessions, and consumes the token', async () => {
+    await createVerifiedUser();
+    const id = await accountIdByUsername();
+    const { cookie } = await login(); // an active session that the reset must kill
+    const raw = await insertPasswordResetToken(id);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/password-reset/confirm',
+      payload: { token: raw, newPassword: NEW_PASSWORD },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(await resetTokenCount(id)).toBe(0);
+
+    // Log out everywhere: the prior session no longer authenticates.
+    const me = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { cookie },
+    });
+    expect(me.statusCode).toBe(401);
+
+    // Old password rejected, new password accepted.
+    const oldLogin = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { username: 'alice', password: PASSWORD },
+    });
+    expect(oldLogin.statusCode).toBe(401);
+    const newLogin = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { username: 'alice', password: NEW_PASSWORD },
+    });
+    expect(newLogin.statusCode).toBe(200);
+  });
+
+  it('rejects an unknown token with 400 invalid_token', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/password-reset/confirm',
+      payload: { token: generateToken().raw, newPassword: NEW_PASSWORD },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('invalid_token');
+  });
+
+  it('rejects an expired token with 410 expired_token', async () => {
+    await createVerifiedUser();
+    const id = await accountIdByUsername();
+    const raw = await insertPasswordResetToken(id, { expired: true });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/password-reset/confirm',
+      payload: { token: raw, newPassword: NEW_PASSWORD },
+    });
+    expect(res.statusCode).toBe(410);
+    expect(res.json().error.code).toBe('expired_token');
+  });
+
+  it('rejects a too-short new password with validation_error', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/password-reset/confirm',
+      payload: { token: generateToken().raw, newPassword: 'short' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('validation_error');
   });
 });

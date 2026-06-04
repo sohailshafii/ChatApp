@@ -135,6 +135,26 @@ server can't drift. Sessions use a 30-day sliding expiry (each authenticated
 request bumps `last_active_at`); inspect them with
 `SELECT account_id, last_active_at FROM sessions;`.
 
+#### Password reset
+
+The reset email links to `/password-reset/confirm?token=…` — the
+`PASSWORD_RESET_CONFIRM_PATH` constant in `@chatapp/shared`. As with
+verification, the link is logged (not emailed) while `RESEND_API_KEY` is unset.
+
+```bash
+# Request by username OR email — always 200, never reveals whether it matched:
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/auth/password-reset/request \
+  -H 'Content-Type: application/json' -d '{"identifier":"alice"}'
+# Then grep the server log for `password-reset link logged for dev` to get the token.
+
+# Confirm with that token + a new password. 200 on success (and ALL of the
+# account's sessions are invalidated); invalid_token (400) / expired_token (410, 1h TTL):
+TOKEN=…
+curl -i -X POST http://localhost:8080/auth/password-reset/confirm \
+  -H 'Content-Type: application/json' \
+  -d "{\"token\":\"$TOKEN\",\"newPassword\":\"a brand new passphrase\"}"
+```
+
 ### Database scripts & migrations
 
 - `npm run db:down` (stop), `npm run db:reset` (drops the volume — **wipes all

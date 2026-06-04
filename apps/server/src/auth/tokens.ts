@@ -26,3 +26,6 @@ export function hashToken(raw: string): string {
 
 // §1: email verification links expire after 24h.
 export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+
+// §1: password-reset links expire after 1h.
+export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
