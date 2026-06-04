@@ -66,6 +66,22 @@ async function createConversation(a: string, b: string): Promise<string> {
   return id;
 }
 
+async function createBotConversation(
+  accountId: string,
+  botId: string,
+): Promise<string> {
+  const { rows } = await query<{ id: string }>(
+    'INSERT INTO conversations (bot_id) VALUES ($1) RETURNING id',
+    [botId],
+  );
+  const id = rows[0]!.id;
+  await query(
+    'INSERT INTO conversation_participants (conversation_id, account_id) VALUES ($1, $2)',
+    [id, accountId],
+  );
+  return id;
+}
+
 // A connected client with a frame queue: next() awaits the next server frame.
 function connect(token: string, origin: string = ORIGIN) {
   const ws = new WebSocket(wsUrl, {
@@ -264,5 +280,48 @@ describe('WebSocket messaging (§3)', () => {
     expect(err.type).toBe('error');
     expect(err.code).toBe('validation_error');
     expect(err.clientMessageId).toBe('c1');
+  });
+});
+
+describe('WebSocket bot replies (§3)', () => {
+  it('streams a bot reply (bot_start -> chunks -> bot_end) and persists it', async () => {
+    const alice = await createUser('alice');
+    const conv = await createBotConversation(alice.id, 'assistant');
+    const a = connect(alice.token);
+    await a.opened();
+
+    a.send({
+      type: 'send',
+      conversationId: conv,
+      clientMessageId: 'c1',
+      content: 'hello bot',
+    });
+
+    expect((await a.next()).type).toBe('ack');
+
+    const start = await a.next();
+    expect(start.type).toBe('bot_start');
+    expect(start.conversationId).toBe(conv);
+    const messageId = start.messageId;
+
+    let streamed = '';
+    let frame = await a.next();
+    while (frame.type === 'bot_chunk') {
+      expect(frame.messageId).toBe(messageId);
+      streamed += frame.delta;
+      frame = await a.next();
+    }
+
+    expect(frame.type).toBe('bot_end');
+    expect(frame.message.id).toBe(messageId);
+    expect(frame.message.senderId).toBe('assistant');
+    expect(frame.message.content.length).toBeGreaterThan(0);
+    expect(streamed).toBe(frame.message.content); // chunks reassemble the message
+
+    const { rows } = await query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM messages WHERE conversation_id = $1 AND sender_id = 'assistant'",
+      [conv],
+    );
+    expect(rows[0]!.n).toBe(1);
   });
 });

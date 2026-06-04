@@ -141,6 +141,41 @@ export async function createMessage(input: {
   return { message: toMessage(rows[0]!), deduped: true };
 }
 
+// Persists a bot reply with a pre-assigned id (so it correlates to the streamed
+// bot_start), bumps activity, and un-hides the conversation (§2). No idempotency
+// key — bot messages are server-generated, not retried.
+export async function persistBotMessage(
+  conversationId: string,
+  botId: string,
+  messageId: string,
+  content: string,
+): Promise<Message> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<MessageRow>(
+      `INSERT INTO messages (id, conversation_id, sender_id, content, client_message_id)
+       VALUES ($1, $2, $3, $4, NULL)
+       RETURNING id, conversation_id, sender_id, content, client_message_id, created_at`,
+      [messageId, conversationId, botId, content],
+    );
+    await client.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [
+      conversationId,
+    ]);
+    await client.query(
+      'UPDATE conversation_participants SET hidden = false WHERE conversation_id = $1',
+      [conversationId],
+    );
+    await client.query('COMMIT');
+    return toMessage(rows[0]!);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 function toMessage(row: MessageRow): Message {
   return {
     id: row.id,
