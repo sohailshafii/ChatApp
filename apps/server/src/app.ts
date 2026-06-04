@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import fastifyCookie from '@fastify/cookie';
 import { loadConfig } from './config.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -13,6 +14,11 @@ export function buildApp(): FastifyInstance {
     // Trust Fly's proxy so request IPs are correct for rate limiting later.
     trustProxy: true,
   });
+
+  // Cookie parsing/serialization for the session + CSRF cookies (§1, §6). No
+  // secret: cookies are unsigned (the session token is itself unguessable, CSRF
+  // is double-submit), so there is nothing to sign.
+  app.register(fastifyCookie);
 
   registerHealthRoutes(app);
   registerAuthRoutes(app);

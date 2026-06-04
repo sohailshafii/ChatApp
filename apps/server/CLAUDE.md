@@ -84,6 +84,44 @@ docker exec -it chatapp-postgres psql -U chatapp -d chatapp \
   -c 'SELECT username, email, verified FROM accounts;'
 ```
 
+#### Login, session & logout
+
+Login needs a **verified** account. Without a mail provider, mark one verified
+by hand (or click the logged verification link):
+
+```bash
+docker exec -it chatapp-postgres psql -U chatapp -d chatapp \
+  -c "UPDATE accounts SET verified = true WHERE username = 'alice';"
+```
+
+Use a cookie jar so the session + CSRF cookies persist across calls:
+
+```bash
+JAR=/tmp/chatapp-cookies.txt
+
+# Login — 200 {"user":{…}}. Sets two cookies: `session` (httpOnly) and
+# `csrf_token` (readable). Errors: invalid_credentials (401), unverified (403).
+curl -s -c "$JAR" -X POST http://localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"alice","password":"correct horse battery staple"}'
+
+# Current user — 200 {"user":{…}} while the session is live, else 401:
+curl -s -b "$JAR" http://localhost:8080/auth/me
+
+# Logout — state-changing, so it needs the double-submit CSRF token: read the
+# `csrf_token` cookie value and echo it in the X-CSRF-Token header. 204 on success;
+# 403 csrf_failure if the header is missing/mismatched.
+CSRF=$(awk '$6=="csrf_token"{print $7}' "$JAR")
+curl -s -b "$JAR" -c "$JAR" -X POST http://localhost:8080/auth/logout \
+  -H "X-CSRF-Token: $CSRF"
+```
+
+Cookie/header names are exported from `@chatapp/shared`
+(`SESSION_COOKIE_NAME`, `CSRF_COOKIE_NAME`, `CSRF_HEADER_NAME`) so client and
+server can't drift. Sessions use a 30-day sliding expiry (each authenticated
+request bumps `last_active_at`); inspect them with
+`SELECT account_id, last_active_at FROM sessions;`.
+
 ### Database scripts & migrations
 
 - `npm run db:down` (stop), `npm run db:reset` (drops the volume — **wipes all
