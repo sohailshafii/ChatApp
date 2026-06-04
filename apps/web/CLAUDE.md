@@ -20,6 +20,55 @@ React + Vite + TypeScript client for ChatApp. Full spec: [`../../REQUIREMENTS.md
 - **TypeScript** strict mode.
 - Wire types imported from `@chatapp/shared`.
 
+## Local development
+
+All commands run from the **repo root**. Install once with `npm install`.
+
+### Build & typecheck (the test gate)
+
+There is no test framework yet (added at first real need — see root CLAUDE.md),
+so typecheck + a production build are the gate every change must pass:
+
+```bash
+npm run typecheck --workspace=@chatapp/web   # tsc --noEmit, strict
+npm run build --workspace=@chatapp/web       # vite build; also prints the gzipped bundle size
+```
+
+The build output reports the gzipped JS size — keep the app shell **≤ 300 KB
+gzipped** (see Conventions). Treat a regression past the budget as a bug.
+
+### Run the app in a browser
+
+The web app calls `/auth/*` on its own origin and Vite proxies those to the
+backend, so cookies stay first-party. To see the app working end-to-end you need
+Postgres + the server + the web dev server. Backend details live in
+[`../server/CLAUDE.md`](../server/CLAUDE.md); the full loop:
+
+```bash
+# 0. One-time: create the local env file (gitignored; defaults match compose.yml).
+cp .env.example .env
+
+# 1. Start Postgres (needs the Docker daemon running) and apply migrations:
+npm run db:up
+npm run migrate --workspace=@chatapp/server
+
+# 2. In one terminal, run the backend (listens on :8080):
+npm run dev:server
+
+# 3. In another terminal, run the web dev server (listens on :5173):
+npm run dev:web
+```
+
+Then open **http://localhost:5173**. Notes:
+
+- Unauthenticated visitors are redirected to **`/login`** (the home route is
+  guarded). Create an account at **`/signup`**.
+- In dev, with no `RESEND_API_KEY` set, the verification email isn't sent — the
+  server **logs the `/verify-email?token=…` link** to its console. Copy that URL
+  into the browser to complete verification.
+- Stop the stack with `npm run db:down` (keeps data) or `npm run db:reset`
+  (wipes the volume); stop the dev servers with Ctrl-C.
+
 ## Conventions
 
 - Bundle budget: **≤ 300 KB gzipped** for the app shell (REQUIREMENTS.md non-functional). Treat regressions as bugs.
