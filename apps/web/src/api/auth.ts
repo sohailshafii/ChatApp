@@ -60,3 +60,31 @@ export async function verifyEmail(token: string): Promise<void> {
 export async function resendVerification(email: string): Promise<void> {
   await apiFetch<void>('/auth/verify-email/resend', { method: 'POST', body: { email } });
 }
+
+/**
+ * POST /auth/password-reset/request — requests a reset link (§1). `identifier`
+ * is a username or email; the server normalizes and responds generically to
+ * avoid revealing whether an account exists. Throws `ApiError` only on
+ * `rate_limited`.
+ */
+export async function requestPasswordReset(identifier: string): Promise<void> {
+  await apiFetch<void>('/auth/password-reset/request', {
+    method: 'POST',
+    body: { identifier },
+  });
+}
+
+/**
+ * POST /auth/password-reset/confirm — sets a new password from a reset token
+ * (1h expiry) and invalidates all existing sessions (§1). Throws `ApiError`
+ * with `invalid_token` / `expired_token`, `validation_error`, or `rate_limited`.
+ */
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  await apiFetch<void>('/auth/password-reset/confirm', {
+    method: 'POST',
+    body: { token, newPassword },
+  });
+}
