@@ -63,9 +63,13 @@ Then open **http://localhost:5173**. Notes:
 
 - Unauthenticated visitors are redirected to **`/login`** (the home route is
   guarded). Create an account at **`/signup`**.
-- In dev, with no `RESEND_API_KEY` set, the verification email isn't sent — the
-  server **logs the `/verify-email?token=…` link** to its console. Copy that URL
-  into the browser to complete verification.
+- To verify an account, grab the verification link from the **server console**
+  (the `dev:server` terminal): the server logs the `/verify-email?token=…` URL
+  there. Copy it into the browser to complete verification. The Resend email
+  client isn't wired up yet, so **the link is always logged and no email is sent
+  in any environment for now** — even with `RESEND_API_KEY` set. (Once Resend is
+  wired, a configured key will send for real; dev without a key will keep
+  logging.)
 - Stop the stack with `npm run db:down` (keeps data) or `npm run db:reset`
   (wipes the volume); stop the dev servers with Ctrl-C.
 
