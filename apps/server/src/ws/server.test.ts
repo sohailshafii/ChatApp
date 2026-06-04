@@ -1,0 +1,268 @@
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import type { AddressInfo } from 'node:net';
+import { WebSocket } from 'ws';
+import type { FastifyInstance } from 'fastify';
+import { SESSION_COOKIE_NAME } from '@chatapp/shared';
+import { buildApp } from '../app.js';
+import { query, closePool } from '../db/pool.js';
+import { hashPassword } from '../auth/passwords.js';
+import { createSession } from '../auth/sessions.js';
+import { loadConfig } from '../config.js';
+
+const ORIGIN = loadConfig().appBaseUrl;
+
+let app: FastifyInstance;
+let wsUrl: string;
+const sockets: WebSocket[] = [];
+
+beforeAll(async () => {
+  app = buildApp();
+  await app.listen({ host: '127.0.0.1', port: 0 });
+  const { port } = app.server.address() as AddressInfo;
+  wsUrl = `ws://127.0.0.1:${port}/ws`;
+});
+
+afterAll(async () => {
+  await app.close();
+  await closePool();
+});
+
+afterEach(async () => {
+  for (const ws of sockets) {
+    try {
+      ws.terminate();
+    } catch {
+      /* ignore */
+    }
+  }
+  sockets.length = 0;
+  await query('TRUNCATE accounts, conversations RESTART IDENTITY CASCADE');
+});
+
+async function createUser(
+  username: string,
+): Promise<{ id: string; token: string }> {
+  const passwordHash = await hashPassword('password-12345');
+  const { rows } = await query<{ id: string }>(
+    `INSERT INTO accounts (username, email, password_hash, verified)
+     VALUES ($1, $2, $3, true) RETURNING id`,
+    [username, `${username}@example.com`, passwordHash],
+  );
+  const id = rows[0]!.id;
+  const token = await createSession(id);
+  return { id, token };
+}
+
+async function createConversation(a: string, b: string): Promise<string> {
+  const { rows } = await query<{ id: string }>(
+    'INSERT INTO conversations DEFAULT VALUES RETURNING id',
+  );
+  const id = rows[0]!.id;
+  await query(
+    `INSERT INTO conversation_participants (conversation_id, account_id)
+     VALUES ($1, $2), ($1, $3)`,
+    [id, a, b],
+  );
+  return id;
+}
+
+// A connected client with a frame queue: next() awaits the next server frame.
+function connect(token: string, origin: string = ORIGIN) {
+  const ws = new WebSocket(wsUrl, {
+    headers: { cookie: `${SESSION_COOKIE_NAME}=${token}`, origin },
+  });
+  sockets.push(ws);
+  const queue: unknown[] = [];
+  let waiter: ((frame: unknown) => void) | null = null;
+  ws.on('message', (data) => {
+    const frame = JSON.parse(data.toString());
+    if (waiter) {
+      const resolve = waiter;
+      waiter = null;
+      resolve(frame);
+    } else {
+      queue.push(frame);
+    }
+  });
+  return {
+    ws,
+    opened: () =>
+      new Promise<void>((resolve, reject) => {
+        ws.once('open', () => resolve());
+        ws.once('error', reject);
+      }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    next: (timeoutMs = 2000): Promise<any> =>
+      new Promise((resolve, reject) => {
+        const queued = queue.shift();
+        if (queued !== undefined) {
+          resolve(queued);
+          return;
+        }
+        const timer = setTimeout(
+          () => reject(new Error('timed out waiting for a frame')),
+          timeoutMs,
+        );
+        waiter = (frame) => {
+          clearTimeout(timer);
+          resolve(frame);
+        };
+      }),
+    send: (obj: unknown) => ws.send(JSON.stringify(obj)),
+  };
+}
+
+// Asserts the upgrade is refused (no 101): ws emits 'error' or 'unexpected-response'.
+function expectRejected(headers: Record<string, string>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl, { headers });
+    sockets.push(ws);
+    ws.on('open', () => reject(new Error('expected the upgrade to be rejected')));
+    ws.on('error', () => resolve());
+    ws.on('unexpected-response', () => resolve());
+  });
+}
+
+describe('WebSocket upgrade auth (§6)', () => {
+  it('rejects without a session cookie', async () => {
+    await expectRejected({ origin: ORIGIN });
+  });
+
+  it('rejects a foreign Origin', async () => {
+    const alice = await createUser('alice');
+    await expectRejected({
+      cookie: `${SESSION_COOKIE_NAME}=${alice.token}`,
+      origin: 'https://evil.example',
+    });
+  });
+
+  it('rejects an invalid session token', async () => {
+    await expectRejected({
+      cookie: `${SESSION_COOKIE_NAME}=not-a-real-token`,
+      origin: ORIGIN,
+    });
+  });
+});
+
+describe('WebSocket messaging (§3)', () => {
+  it('acks the sender and fans the message out to the peer with a delivery receipt', async () => {
+    const alice = await createUser('alice');
+    const bob = await createUser('bob');
+    const conv = await createConversation(alice.id, bob.id);
+    const a = connect(alice.token);
+    const b = connect(bob.token);
+    await a.opened();
+    await b.opened();
+
+    a.send({
+      type: 'send',
+      conversationId: conv,
+      clientMessageId: 'c1',
+      content: 'hi bob',
+    });
+
+    const ack = await a.next();
+    expect(ack.type).toBe('ack');
+    expect(ack.clientMessageId).toBe('c1');
+    expect(ack.message.content).toBe('hi bob');
+    expect(ack.message.senderId).toBe(alice.id);
+    expect(ack.message.clientMessageId).toBe('c1');
+    expect(typeof ack.message.createdAt).toBe('string');
+
+    const peer = await b.next();
+    expect(peer.type).toBe('message');
+    expect(peer.message.id).toBe(ack.message.id);
+    expect(peer.message.content).toBe('hi bob');
+    expect(peer.message.clientMessageId).toBeNull();
+
+    const delivered = await a.next();
+    expect(delivered).toMatchObject({
+      type: 'delivered',
+      conversationId: conv,
+      messageId: ack.message.id,
+    });
+  });
+
+  it("fans out to the sender's other tabs (no clientMessageId)", async () => {
+    const alice = await createUser('alice');
+    const bob = await createUser('bob');
+    const conv = await createConversation(alice.id, bob.id);
+    const a1 = connect(alice.token);
+    const a2 = connect(alice.token);
+    await a1.opened();
+    await a2.opened();
+
+    a1.send({
+      type: 'send',
+      conversationId: conv,
+      clientMessageId: 'c1',
+      content: 'hello',
+    });
+
+    expect((await a1.next()).type).toBe('ack');
+    const onOtherTab = await a2.next();
+    expect(onOtherTab.type).toBe('message');
+    expect(onOtherTab.message.content).toBe('hello');
+    expect(onOtherTab.message.clientMessageId).toBeNull();
+  });
+
+  it('is idempotent on clientMessageId — a retry returns the same message', async () => {
+    const alice = await createUser('alice');
+    const bob = await createUser('bob');
+    const conv = await createConversation(alice.id, bob.id);
+    const a = connect(alice.token);
+    await a.opened();
+
+    a.send({ type: 'send', conversationId: conv, clientMessageId: 'dup', content: 'once' });
+    const ack1 = await a.next();
+    a.send({ type: 'send', conversationId: conv, clientMessageId: 'dup', content: 'once' });
+    const ack2 = await a.next();
+
+    expect(ack1.type).toBe('ack');
+    expect(ack2.type).toBe('ack');
+    expect(ack2.message.id).toBe(ack1.message.id);
+
+    const { rows } = await query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM messages WHERE conversation_id = $1',
+      [conv],
+    );
+    expect(rows[0]!.n).toBe(1);
+  });
+
+  it('rejects a send to a conversation the user is not part of', async () => {
+    const alice = await createUser('alice');
+    const bob = await createUser('bob');
+    const carol = await createUser('carol');
+    const conv = await createConversation(alice.id, bob.id);
+    const c = connect(carol.token);
+    await c.opened();
+
+    c.send({
+      type: 'send',
+      conversationId: conv,
+      clientMessageId: 'c1',
+      content: 'intrude',
+    });
+    const err = await c.next();
+    expect(err.type).toBe('error');
+    expect(err.code).toBe('not_found');
+    expect(err.clientMessageId).toBe('c1');
+  });
+
+  it('rejects a malformed frame with a validation error (echoing clientMessageId)', async () => {
+    const alice = await createUser('alice');
+    const a = connect(alice.token);
+    await a.opened();
+
+    a.send({
+      type: 'send',
+      conversationId: 'not-a-uuid',
+      clientMessageId: 'c1',
+      content: 'x',
+    });
+    const err = await a.next();
+    expect(err.type).toBe('error');
+    expect(err.code).toBe('validation_error');
+    expect(err.clientMessageId).toBe('c1');
+  });
+});
