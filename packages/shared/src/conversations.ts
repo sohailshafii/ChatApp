@@ -48,3 +48,29 @@ export const conversationListResponseSchema = z.object({
 export type ConversationListResponse = z.infer<
   typeof conversationListResponseSchema
 >;
+
+// GET /conversations/:id — a single conversation's summary (e.g. a deep link to
+// a conversation not already in the loaded list).
+export const conversationResponseSchema = z.object({
+  conversation: conversationSummarySchema,
+});
+export type ConversationResponse = z.infer<typeof conversationResponseSchema>;
+
+// POST /conversations — start, or fetch the existing, conversation with a peer
+// (§2). Human peers are addressed by exact username; bot peers by id. A failed
+// human lookup returns a generic `not_found` (no enumeration). Idempotent: a
+// user cannot have two parallel conversations with the same peer.
+export const startConversationRequestSchema = z.discriminatedUnion('peerKind', [
+  z.object({ peerKind: z.literal('human'), username: usernameSchema }),
+  z.object({ peerKind: z.literal('bot'), botId: z.string().min(1) }),
+]);
+export type StartConversationRequest = z.infer<
+  typeof startConversationRequestSchema
+>;
+
+export const startConversationResponseSchema = z.object({
+  conversation: conversationSummarySchema,
+});
+export type StartConversationResponse = z.infer<
+  typeof startConversationResponseSchema
+>;
