@@ -79,6 +79,28 @@ Then open **http://localhost:5173**. Notes:
 - Stop the stack with `npm run db:down` (keeps data) or `npm run db:reset`
   (wipes the volume); stop the dev servers with Ctrl-C.
 
+## App flow (auth → conversation list)
+
+The post-login / page-load sequence, per REQUIREMENTS.md §2 and §7:
+
+1. **Bootstrap.** On load, `AuthProvider` (`src/auth/AuthContext.tsx`) calls
+   `GET /auth/me`. `status` is `loading` → `authenticated` | `unauthenticated`
+   (the session cookie is httpOnly, so the server is the source of truth).
+2. **Routing on auth.** `RequireAuth` gates the app home (`/`) and redirects
+   unauthenticated users to `/login` (remembering the attempted path);
+   `RedirectIfAuthed` keeps authenticated users off `/login` and `/signup`.
+3. **Land on the conversation list.** A successful login seeds the session and
+   navigates to `/`, whose index route is the **conversation list** (`HomePage`),
+   which fetches `GET /conversations` on mount (§2). This is the home view.
+4. **Realtime (later, §3).** Per §7, after the initial REST load the client opens
+   a **WebSocket** for live delivery. Not built yet.
+
+Current shape vs. §7: §7 frames login/page-load as fetching initial state as a
+unit (profile **and** conversation list). Today those are **two independent
+fetches** — `AuthContext` (`/auth/me`) and `HomePage` (`/conversations`) — which
+is fine for now; revisit if a unified initial-state endpoint or a shared store
+becomes warranted. The WebSocket step is still pending.
+
 ## Conventions
 
 - Bundle budget: **≤ 300 KB gzipped** for the app shell (REQUIREMENTS.md non-functional). Treat regressions as bugs.
