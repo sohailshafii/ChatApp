@@ -185,6 +185,15 @@ per-participant last-seen cursor (migration 005).
   `nextBefore` cursor.
 - `POST /conversations/:id/read` `{ messageId }` — advance the last-seen cursor
   (§7); `204`. CSRF-protected.
+- `POST /conversations` `{peerKind:'human',username}` or `{peerKind:'bot',botId}`
+  — start or fetch (idempotent) the conversation with a peer (`StartConversationResponse`);
+  generic `not_found` for an unaddressable peer (unknown/unverified user, self,
+  unknown bot). CSRF-protected.
+- `DELETE /conversations/:id` — hide the conversation from the caller's list (the
+  peer is unaffected; new activity un-hides it, migration 006 `hidden` flag);
+  `204`. CSRF-protected.
+- `GET /bots` — the system bot registry (`BotListResponse`, from
+  `src/bots/registry.ts`).
 
 ```bash
 curl -s -b "$JAR" http://localhost:8080/conversations

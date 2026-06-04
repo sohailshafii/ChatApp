@@ -3,9 +3,11 @@ import { z } from 'zod';
 import {
   messageHistoryQuerySchema,
   markReadRequestSchema,
+  startConversationRequestSchema,
   type ConversationListResponse,
   type ConversationResponse,
   type MessagePage,
+  type StartConversationResponse,
 } from '@chatapp/shared';
 import { requireSession, requireCsrf } from '../auth/guards.js';
 import {
@@ -17,6 +19,7 @@ import {
   isParticipant,
   markRead,
 } from '../conversations/messages.js';
+import { startConversation, hideConversation } from '../conversations/manage.js';
 import { sendError } from '../http/errors.js';
 
 const uuidSchema = z.string().uuid();
@@ -35,6 +38,38 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       const body: ConversationListResponse = {
         conversations: await listConversations(request.authUser!.id),
       };
+      return reply.send(body);
+    },
+  );
+
+  // POST /conversations (§2) — start, or fetch the existing, conversation with a
+  // peer (idempotent). Human peers by exact username, bot peers by id; an
+  // unaddressable peer (unknown/unverified user, self, unknown bot) returns a
+  // generic not_found (no enumeration).
+  app.post(
+    '/conversations',
+    { preHandler: [requireSession, requireCsrf] },
+    async (request, reply) => {
+      const parsed = startConversationRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return sendError(
+          reply,
+          'validation_error',
+          parsed.error.issues[0]?.message ?? 'Invalid request',
+        );
+      }
+      const conversationId = await startConversation(
+        request.authUser!.id,
+        parsed.data,
+      );
+      if (!conversationId) {
+        return sendError(reply, 'not_found', 'No such user');
+      }
+      const conversation = await getConversationSummary(
+        request.authUser!.id,
+        conversationId,
+      );
+      const body: StartConversationResponse = { conversation: conversation! };
       return reply.send(body);
     },
   );
@@ -113,6 +148,20 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       );
       if (!ok) {
         return sendError(reply, 'not_found', 'Conversation or message not found');
+      }
+      return reply.code(204).send();
+    },
+  );
+
+  // DELETE /conversations/:id (§2) — hide the conversation from the caller's
+  // list (the peer is unaffected). New activity un-hides it.
+  app.delete(
+    '/conversations/:id',
+    { preHandler: [requireSession, requireCsrf] },
+    async (request, reply) => {
+      const id = paramId(request);
+      if (!id || !(await hideConversation(request.authUser!.id, id))) {
+        return sendError(reply, 'not_found', 'Conversation not found');
       }
       return reply.code(204).send();
     },

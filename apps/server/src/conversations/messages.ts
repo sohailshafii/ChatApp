@@ -114,6 +114,11 @@ export async function createMessage(input: {
       await client.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [
         input.conversationId,
       ]);
+      // New activity re-surfaces the conversation for anyone who hid it (§2).
+      await client.query(
+        'UPDATE conversation_participants SET hidden = false WHERE conversation_id = $1',
+        [input.conversationId],
+      );
     }
     await client.query('COMMIT');
   } catch (err) {
