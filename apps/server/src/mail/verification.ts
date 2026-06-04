@@ -1,4 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
+import { EMAIL_VERIFY_PATH } from '@chatapp/shared';
 import { loadConfig } from '../config.js';
 
 // Dispatches the signup verification email (§1).
@@ -13,7 +14,7 @@ export async function sendVerificationEmail(
   rawToken: string,
 ): Promise<void> {
   const { appBaseUrl, resendApiKey } = loadConfig();
-  const link = `${appBaseUrl}/verify-email?token=${encodeURIComponent(rawToken)}`;
+  const link = `${appBaseUrl}${EMAIL_VERIFY_PATH}?token=${encodeURIComponent(rawToken)}`;
 
   if (!resendApiKey) {
     log.warn(

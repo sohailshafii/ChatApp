@@ -4,6 +4,8 @@ import {
   loginRequestSchema,
   verifyEmailRequestSchema,
   resendVerificationRequestSchema,
+  passwordResetRequestSchema,
+  passwordResetConfirmSchema,
   SESSION_COOKIE_NAME,
   CSRF_COOKIE_NAME,
   CSRF_HEADER_NAME,
@@ -16,6 +18,7 @@ import {
   generateToken,
   hashToken,
   EMAIL_VERIFICATION_TTL_MS,
+  PASSWORD_RESET_TTL_MS,
 } from '../auth/tokens.js';
 import {
   createSession,
@@ -27,6 +30,7 @@ import {
 } from '../auth/sessions.js';
 import { generateCsrfToken, csrfTokensMatch } from '../auth/csrf.js';
 import { sendVerificationEmail } from '../mail/verification.js';
+import { sendPasswordResetEmail } from '../mail/password-reset.js';
 import { sendError } from '../http/errors.js';
 import { loadConfig } from '../config.js';
 
@@ -328,6 +332,131 @@ export function registerAuthRoutes(app: FastifyInstance): void {
           request.log.error({ err }, 'verification email dispatch failed');
         }
       }
+    }
+
+    return reply.code(200).send();
+  });
+
+  // POST /auth/password-reset/request (§1). Accepts a username OR email and sends
+  // a 1h reset link to the account's email. Always 200 with an empty body so it
+  // never reveals whether the identifier matched an account (anti-enumeration).
+  // Needs rate limiting when that primitive lands (§6).
+  app.post('/auth/password-reset/request', async (request, reply) => {
+    const parsed = passwordResetRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(
+        reply,
+        'validation_error',
+        parsed.error.issues[0]?.message ?? 'Invalid reset request',
+      );
+    }
+    const { identifier } = parsed.data;
+
+    // citext columns -> case-insensitive match on either username or email.
+    const { rows } = await query<{ id: string; email: string }>(
+      'SELECT id, email FROM accounts WHERE username = $1 OR email = $1',
+      [identifier],
+    );
+    const account = rows[0];
+
+    if (account) {
+      const token = generateToken();
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+
+      let stored = false;
+      const client = await getPool().connect();
+      try {
+        await client.query('BEGIN');
+        // Replace outstanding reset tokens so only the newest link works.
+        await client.query(
+          'DELETE FROM password_reset_tokens WHERE account_id = $1',
+          [account.id],
+        );
+        await client.query(
+          `INSERT INTO password_reset_tokens (token_hash, account_id, expires_at)
+           VALUES ($1, $2, $3)`,
+          [token.hash, account.id, expiresAt],
+        );
+        await client.query('COMMIT');
+        stored = true;
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        request.log.error({ err }, 'password-reset request failed');
+      } finally {
+        client.release();
+      }
+
+      if (stored) {
+        try {
+          await sendPasswordResetEmail(request.log, account.email, token.raw);
+        } catch (err) {
+          request.log.error({ err }, 'password-reset email dispatch failed');
+        }
+      }
+    }
+
+    return reply.code(200).send();
+  });
+
+  // POST /auth/password-reset/confirm (§1). Sets a new password from a valid reset
+  // token and invalidates ALL of the account's sessions ("log out everywhere").
+  app.post('/auth/password-reset/confirm', async (request, reply) => {
+    const parsed = passwordResetConfirmSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(
+        reply,
+        'validation_error',
+        parsed.error.issues[0]?.message ?? 'Invalid reset request',
+      );
+    }
+    const { token, newPassword } = parsed.data;
+    const tokenHash = hashToken(token);
+
+    const { rows } = await query<{ account_id: string; expires_at: Date }>(
+      `SELECT account_id, expires_at
+         FROM password_reset_tokens
+        WHERE token_hash = $1`,
+      [tokenHash],
+    );
+    const record = rows[0];
+    if (!record) {
+      return sendError(reply, 'invalid_token', 'This reset link is invalid');
+    }
+    if (record.expires_at.getTime() <= Date.now()) {
+      await query('DELETE FROM password_reset_tokens WHERE token_hash = $1', [
+        tokenHash,
+      ]);
+      return sendError(
+        reply,
+        'expired_token',
+        'This reset link has expired; request a new one',
+      );
+    }
+
+    // Hash outside the transaction (argon2 is ~250ms). Then set the password,
+    // drop every session for the account (§1), and consume the reset tokens.
+    const passwordHash = await hashPassword(newPassword);
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'UPDATE accounts SET password_hash = $1 WHERE id = $2',
+        [passwordHash, record.account_id],
+      );
+      await client.query('DELETE FROM sessions WHERE account_id = $1', [
+        record.account_id,
+      ]);
+      await client.query(
+        'DELETE FROM password_reset_tokens WHERE account_id = $1',
+        [record.account_id],
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      request.log.error({ err }, 'password-reset confirm failed');
+      return sendError(reply, 'internal_error', 'Could not reset password');
+    } finally {
+      client.release();
     }
 
     return reply.code(200).send();
