@@ -1,4 +1,9 @@
-import { errorEnvelopeSchema, type ErrorCode } from '@chatapp/shared';
+import {
+  CSRF_COOKIE_NAME,
+  CSRF_HEADER_NAME,
+  errorEnvelopeSchema,
+  type ErrorCode,
+} from '@chatapp/shared';
 
 // Single fetch wrapper for all REST calls.
 //
@@ -8,14 +13,11 @@ import { errorEnvelopeSchema, type ErrorCode } from '@chatapp/shared';
 //    branch on `error.code` instead of poking at raw responses.
 //  - Attach the double-submit CSRF token on state-changing requests
 //    (REQUIREMENTS.md §security: non-HttpOnly cookie echoed via a request header).
+//    The cookie/header names come from @chatapp/shared so client and server
+//    can't drift on the contract.
 //
 // The session cookie is httpOnly and handled by the browser, so we only need
 // `credentials` set — we never read or set it here.
-
-// Names for the double-submit CSRF pair. These are a contract shared with the
-// server; kept here as the single source of truth on the client.
-const CSRF_COOKIE = 'csrf_token';
-const CSRF_HEADER = 'X-CSRF-Token';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -66,8 +68,8 @@ export async function apiFetch<T = unknown>(
   if (hasBody) headers['Content-Type'] = 'application/json';
 
   if (!SAFE_METHODS.has(method)) {
-    const csrf = readCookie(CSRF_COOKIE);
-    if (csrf) headers[CSRF_HEADER] = csrf;
+    const csrf = readCookie(CSRF_COOKIE_NAME);
+    if (csrf) headers[CSRF_HEADER_NAME] = csrf;
   }
 
   let res: Response;
