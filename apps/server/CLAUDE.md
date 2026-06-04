@@ -228,9 +228,12 @@ Messages get a server-assigned `createdAt` (the §3 ordering key) and are
 idempotent on `(sender_id, clientMessageId)` — a retry re-acks the same message
 without duplicating or re-broadcasting. Live sockets are tracked per account in
 `src/ws/hub.ts` (in-process; move behind a pub/sub before running multiple
-machines). Bot reply streaming (`bot_start`/`bot_chunk`/`bot_end`) is in the
-protocol but produced by the bot-orchestration work — a send into a bot
-conversation is persisted + acked, with no reply yet.
+machines). A send into a **bot** conversation streams a reply: after the user
+message is persisted + acked, the orchestrator (`src/bots/orchestrator.ts`) emits
+`bot_start` → `bot_chunk*` → `bot_end` (or `bot_error`) and persists the reply as
+a message from the bot. Replies come from a pluggable provider
+(`src/bots/provider.ts`); a **stub** streams a placeholder until the real
+OpenAI/Anthropic clients + per-user/day token budget (§cost) land (next PR).
 
 ### Database scripts & migrations
 

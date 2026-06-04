@@ -21,3 +21,10 @@ export function listBots(): readonly Bot[] {
 export function getBot(id: string): Bot | undefined {
   return BY_ID.get(id);
 }
+
+// The system prompt sent to the model for a bot conversation. Generic for now;
+// per-bot personas are a product decision that rides with bot orchestration.
+export function systemPromptFor(id: string): string {
+  const name = getBot(id)?.name ?? 'a helpful assistant';
+  return `You are ${name}, a helpful assistant in a chat app. Be concise and friendly.`;
+}
