@@ -32,6 +32,12 @@ import { generateCsrfToken, csrfTokensMatch } from '../auth/csrf.js';
 import { sendVerificationEmail } from '../mail/verification.js';
 import { sendPasswordResetEmail } from '../mail/password-reset.js';
 import { sendError } from '../http/errors.js';
+import {
+  rateLimited,
+  AUTH_LIMITS,
+  ipKey,
+  accountKey,
+} from '../rate-limit/auth-rate-limit.js';
 import { loadConfig } from '../config.js';
 
 // Postgres unique-violation error code.
@@ -71,6 +77,14 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       );
     }
     const { username, email, password } = parsed.data;
+
+    if (
+      rateLimited(reply, [
+        { key: ipKey('signup', request.ip), rule: AUTH_LIMITS.signupPerIp },
+      ])
+    ) {
+      return reply;
+    }
 
     // Hash before opening a transaction — argon2 is ~250ms and shouldn't hold a
     // DB connection. Persist the account and its verification token atomically.
@@ -141,6 +155,18 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       );
     }
     const { username, password } = parsed.data;
+
+    if (
+      rateLimited(reply, [
+        { key: ipKey('login', request.ip), rule: AUTH_LIMITS.loginPerIp },
+        {
+          key: accountKey('login', username),
+          rule: AUTH_LIMITS.loginPerAccount,
+        },
+      ])
+    ) {
+      return reply;
+    }
 
     const { rows } = await query<AccountRow & { password_hash: string }>(
       `SELECT id, username, email, verified, created_at, password_hash
@@ -290,6 +316,18 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     }
     const { email } = parsed.data;
 
+    if (
+      rateLimited(reply, [
+        { key: ipKey('verify-resend', request.ip), rule: AUTH_LIMITS.resendPerIp },
+        {
+          key: accountKey('verify-resend', email),
+          rule: AUTH_LIMITS.resendPerAccount,
+        },
+      ])
+    ) {
+      return reply;
+    }
+
     const { rows } = await query<{ id: string; verified: boolean }>(
       'SELECT id, verified FROM accounts WHERE email = $1',
       [email],
@@ -351,6 +389,18 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       );
     }
     const { identifier } = parsed.data;
+
+    if (
+      rateLimited(reply, [
+        { key: ipKey('reset', request.ip), rule: AUTH_LIMITS.resetPerIp },
+        {
+          key: accountKey('reset', identifier),
+          rule: AUTH_LIMITS.resetPerAccount,
+        },
+      ])
+    ) {
+      return reply;
+    }
 
     // citext columns -> case-insensitive match on either username or email.
     const { rows } = await query<{ id: string; email: string }>(

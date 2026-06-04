@@ -8,6 +8,7 @@ import {
 import { buildApp } from '../app.js';
 import { query, closePool } from '../db/pool.js';
 import { generateToken } from '../auth/tokens.js';
+import { authLimiter, AUTH_LIMITS } from '../rate-limit/auth-rate-limit.js';
 
 // Exercises the §1 auth flow end-to-end against the dedicated test database
 // (provisioned in global-setup) — the curl flow from apps/server/CLAUDE.md,
@@ -33,6 +34,7 @@ afterEach(async () => {
   await query(
     'TRUNCATE accounts, sessions, email_verification_tokens, password_reset_tokens RESTART IDENTITY CASCADE',
   );
+  authLimiter.reset(); // keep rate-limit windows from leaking across tests
 });
 
 function getCookie(res: InjectResponse, name: string) {
@@ -512,5 +514,62 @@ describe('POST /auth/password-reset/confirm', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('validation_error');
+  });
+});
+
+describe('auth rate limiting (§6)', () => {
+  const resend = (headers?: Record<string, string>) =>
+    app.inject({
+      method: 'POST',
+      url: '/auth/verify-email/resend',
+      payload: { email: 'nobody@example.com' },
+      ...(headers ? { headers } : {}),
+    });
+
+  it('blocks resend past the per-IP limit with 429 rate_limited', async () => {
+    for (let i = 0; i < AUTH_LIMITS.resendPerIp.max; i++) {
+      expect((await resend()).statusCode).toBe(200);
+    }
+    const blocked = await resend();
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json().error.code).toBe('rate_limited');
+  });
+
+  it('keys the per-IP limit by source IP (X-Forwarded-For, trustProxy)', async () => {
+    // Distinct email per call so only the per-IP limit (not per-email) is in play.
+    const fromDefault = (n: number) =>
+      app.inject({
+        method: 'POST',
+        url: '/auth/verify-email/resend',
+        payload: { email: `u${n}@example.com` },
+      });
+    for (let i = 0; i <= AUTH_LIMITS.resendPerIp.max; i++) await fromDefault(i);
+    expect((await fromDefault(99)).statusCode).toBe(429); // default IP exhausted
+
+    // A different forwarded IP has its own fresh per-IP window.
+    const other = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-email/resend',
+      payload: { email: 'fresh@example.com' },
+      headers: { 'x-forwarded-for': '203.0.113.9' },
+    });
+    expect(other.statusCode).toBe(200);
+  });
+
+  it('limits login per account, independent of other usernames', async () => {
+    const attempt = (username: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { username, password: 'whatever-password' },
+      });
+    for (let i = 0; i < AUTH_LIMITS.loginPerAccount.max; i++) {
+      expect((await attempt('ghost')).statusCode).toBe(401); // unknown user
+    }
+    const blocked = await attempt('ghost');
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json().error.code).toBe('rate_limited');
+
+    expect((await attempt('phantom')).statusCode).toBe(401); // separate counter
   });
 });
