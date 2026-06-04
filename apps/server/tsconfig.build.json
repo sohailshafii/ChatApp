@@ -1,0 +1,7 @@
+{
+  // Build (emit) config: same as tsconfig.json but excludes tests + test
+  // helpers so they don't land in dist. `typecheck` (tsc --noEmit) still uses
+  // tsconfig.json, which includes them, so test files stay type-checked.
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts", "src/test"]
+}
