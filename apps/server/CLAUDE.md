@@ -130,6 +130,29 @@ request bumps `last_active_at`); inspect them with
   order and tracked in `schema_migrations`. Add a new forward migration rather
   than editing an applied one.
 
+### Tests
+
+[Vitest](https://vitest.dev), matching `apps/web`. Tests are `*.test.ts`
+co-located under `src`. The change gate is **typecheck + test + build**:
+
+```bash
+npm run typecheck -w @chatapp/server
+npm run test -w @chatapp/server      # or `npm test` to run every workspace
+npm run build -w @chatapp/server
+```
+
+- **Unit tests** (`src/auth/*.test.ts`) cover the pure primitives (CSRF compare,
+  token hashing, password hash/verify) — no I/O.
+- **Integration tests** (`src/routes/auth.test.ts`) drive the full signup →
+  login → me → logout flow (the curl flow above) via Fastify's in-process
+  `app.inject()`.
+- The suite needs Postgres running (`npm run db:up`). Integration tests use a
+  **separate `chatapp_test` database**, provisioned and migrated automatically
+  by `src/test/global-setup.ts`, so they never touch your dev data. Tables are
+  truncated between tests.
+- `npm run test:watch -w @chatapp/server` for watch mode. The build excludes
+  test files via `tsconfig.build.json`, so they never ship in `dist`.
+
 ## Hosting
 
 - Fly.io app, region `iad` for v1. See [`fly.toml`](../../fly.toml) at the repo root.
