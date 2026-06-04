@@ -198,8 +198,30 @@ curl -s -o /dev/null -w '%{http_code}\n' -b "$JAR" -X POST \
 ```
 
 Peers resolve to the other human or a system bot (`src/bots/registry.ts`).
-Message **creation** is over the WebSocket (next PR); the above is the read side.
 A message's `sender_id` is the human's account id or a bot slug.
+
+#### WebSocket messaging (§3)
+
+`ws://…/ws` — the upgrade requires the **session cookie + a same-origin `Origin`
+header** (§6); otherwise it's refused (401/403). Frame envelopes live in
+`@chatapp/shared` `ws.ts`. The client sends `{type:'send', conversationId,
+clientMessageId, content}`; the server:
+
+- replies on the originating socket with **`ack`** (the persisted message +
+  `clientMessageId`),
+- fans the message out to the other participant sockets **and the sender's other
+  tabs** as **`message`** (with `clientMessageId` nulled),
+- sends the sender a **`delivered`** receipt when a human peer socket received it,
+- returns **`error{code, clientMessageId}`** on a bad/forbidden frame (the socket
+  stays open).
+
+Messages get a server-assigned `createdAt` (the §3 ordering key) and are
+idempotent on `(sender_id, clientMessageId)` — a retry re-acks the same message
+without duplicating or re-broadcasting. Live sockets are tracked per account in
+`src/ws/hub.ts` (in-process; move behind a pub/sub before running multiple
+machines). Bot reply streaming (`bot_start`/`bot_chunk`/`bot_end`) is in the
+protocol but produced by the bot-orchestration work — a send into a bot
+conversation is persisted + acked, with no reply yet.
 
 ### Database scripts & migrations
 
