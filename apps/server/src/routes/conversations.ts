@@ -1,11 +1,33 @@
 import type { FastifyInstance } from 'fastify';
-import type { ConversationListResponse } from '@chatapp/shared';
-import { requireSession } from '../auth/guards.js';
-import { listConversations } from '../conversations/list.js';
+import { z } from 'zod';
+import {
+  messageHistoryQuerySchema,
+  markReadRequestSchema,
+  type ConversationListResponse,
+  type ConversationResponse,
+  type MessagePage,
+} from '@chatapp/shared';
+import { requireSession, requireCsrf } from '../auth/guards.js';
+import {
+  listConversations,
+  getConversationSummary,
+} from '../conversations/summaries.js';
+import {
+  getMessagePage,
+  isParticipant,
+  markRead,
+} from '../conversations/messages.js';
+import { sendError } from '../http/errors.js';
+
+const uuidSchema = z.string().uuid();
+
+function paramId(request: { params: unknown }): string | null {
+  const parsed = uuidSchema.safeParse((request.params as { id?: unknown }).id);
+  return parsed.success ? parsed.data : null;
+}
 
 export function registerConversationRoutes(app: FastifyInstance): void {
-  // GET /conversations (§2) — the authenticated user's conversation list,
-  // most-recent activity first.
+  // GET /conversations (§2) — the caller's conversation list, newest first.
   app.get(
     '/conversations',
     { preHandler: requireSession },
@@ -13,7 +35,86 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       const body: ConversationListResponse = {
         conversations: await listConversations(request.authUser!.id),
       };
-      return reply.code(200).send(body);
+      return reply.send(body);
+    },
+  );
+
+  // GET /conversations/:id (§2) — a single conversation summary. 404 (generic)
+  // when the conversation doesn't exist or the caller isn't a participant.
+  app.get(
+    '/conversations/:id',
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const id = paramId(request);
+      const conversation = id
+        ? await getConversationSummary(request.authUser!.id, id)
+        : null;
+      if (!conversation) {
+        return sendError(reply, 'not_found', 'Conversation not found');
+      }
+      const body: ConversationResponse = { conversation };
+      return reply.send(body);
+    },
+  );
+
+  // GET /conversations/:id/messages (§4) — backward-paginated history.
+  app.get(
+    '/conversations/:id/messages',
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const id = paramId(request);
+      if (!id || !(await isParticipant(request.authUser!.id, id))) {
+        return sendError(reply, 'not_found', 'Conversation not found');
+      }
+      const q = messageHistoryQuerySchema.safeParse(request.query);
+      if (!q.success) {
+        return sendError(
+          reply,
+          'validation_error',
+          q.error.issues[0]?.message ?? 'Invalid query',
+        );
+      }
+      // The `before` cursor is a message id.
+      if (
+        q.data.before !== undefined &&
+        !uuidSchema.safeParse(q.data.before).success
+      ) {
+        return sendError(reply, 'validation_error', 'Invalid pagination cursor');
+      }
+      const body: MessagePage = await getMessagePage(
+        id,
+        q.data.before ?? null,
+        q.data.limit,
+      );
+      return reply.send(body);
+    },
+  );
+
+  // POST /conversations/:id/read (§7) — advance the last-seen cursor. State-
+  // changing, so it requires the double-submit CSRF token.
+  app.post(
+    '/conversations/:id/read',
+    { preHandler: [requireSession, requireCsrf] },
+    async (request, reply) => {
+      const id = paramId(request);
+      if (!id) return sendError(reply, 'not_found', 'Conversation not found');
+      const parsed = markReadRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return sendError(
+          reply,
+          'validation_error',
+          parsed.error.issues[0]?.message ?? 'Invalid request',
+        );
+      }
+      const ok = await markRead(
+        request.authUser!.id,
+        id,
+        parsed.data.messageId,
+      );
+      if (!ok) {
+        return sendError(reply, 'not_found', 'Conversation or message not found');
+      }
+      return reply.code(204).send();
     },
   );
 }

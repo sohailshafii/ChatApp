@@ -1,9 +1,16 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import {
   SESSION_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
+  CSRF_HEADER_NAME,
   conversationListResponseSchema,
+  conversationResponseSchema,
+  messagePageSchema,
   type ConversationListResponse,
+  type ConversationResponse,
+  type MessagePage,
 } from '@chatapp/shared';
 import { buildApp } from '../app.js';
 import { query, closePool } from '../db/pool.js';
@@ -76,6 +83,26 @@ async function createBotConversation(
     [id, accountId],
   );
   return id;
+}
+
+async function insertMessage(
+  conversationId: string,
+  senderId: string,
+  content: string,
+  opts: { clientMessageId?: string; createdAt?: Date } = {},
+): Promise<{ id: string; created_at: Date }> {
+  const { rows } = await query<{ id: string; created_at: Date }>(
+    `INSERT INTO messages (conversation_id, sender_id, content, client_message_id, created_at)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
+    [
+      conversationId,
+      senderId,
+      content,
+      opts.clientMessageId ?? null,
+      opts.createdAt ?? new Date(),
+    ],
+  );
+  return rows[0]!;
 }
 
 function listFor(cookie: string) {
@@ -151,5 +178,209 @@ describe('GET /conversations', () => {
 
     const body = (await listFor(alice.cookie)).json() as ConversationListResponse;
     expect(body.conversations).toEqual([]);
+  });
+
+  it('populates last-message preview and unread count from the peer', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const convId = await createHumanConversation(alice.id, bob.id);
+    await insertMessage(convId, bob.id, 'hello alice', {
+      createdAt: new Date('2026-03-01T00:00:00Z'),
+    });
+    await insertMessage(convId, bob.id, 'are you there?', {
+      createdAt: new Date('2026-03-01T00:01:00Z'),
+    });
+
+    const body = (await listFor(alice.cookie)).json() as ConversationListResponse;
+    const convo = body.conversations[0]!;
+    expect(convo.lastMessage?.preview).toBe('are you there?');
+    expect(convo.unreadCount).toBe(2);
+  });
+});
+
+describe('GET /conversations/:id', () => {
+  it('returns the summary for a participant (matches the wire schema)', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const convId = await createHumanConversation(alice.id, bob.id);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/conversations/${convId}`,
+      headers: { cookie: alice.cookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(conversationResponseSchema.safeParse(res.json()).success).toBe(true);
+    expect((res.json() as ConversationResponse).conversation.id).toBe(convId);
+  });
+
+  it('404s for a non-participant', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const carol = await createUserWithSession('carol');
+    const convId = await createHumanConversation(bob.id, carol.id);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/conversations/${convId}`,
+      headers: { cookie: alice.cookie },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('not_found');
+  });
+
+  it('404s for a malformed/unknown id and 401s without a session', async () => {
+    const alice = await createUserWithSession('alice');
+    const bad = await app.inject({
+      method: 'GET',
+      url: '/conversations/not-a-uuid',
+      headers: { cookie: alice.cookie },
+    });
+    expect(bad.statusCode).toBe(404);
+    const unknown = await app.inject({
+      method: 'GET',
+      url: `/conversations/${randomUUID()}`,
+      headers: { cookie: alice.cookie },
+    });
+    expect(unknown.statusCode).toBe(404);
+    const anon = await app.inject({
+      method: 'GET',
+      url: `/conversations/${randomUUID()}`,
+    });
+    expect(anon.statusCode).toBe(401);
+  });
+});
+
+describe('GET /conversations/:id/messages', () => {
+  it('returns history oldest-first, server-timestamp ordered', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const convId = await createHumanConversation(alice.id, bob.id);
+    await insertMessage(convId, alice.id, 'first', {
+      createdAt: new Date('2026-03-01T00:00:00Z'),
+    });
+    await insertMessage(convId, bob.id, 'second', {
+      createdAt: new Date('2026-03-01T00:01:00Z'),
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/conversations/${convId}/messages`,
+      headers: { cookie: alice.cookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(messagePageSchema.safeParse(res.json()).success).toBe(true);
+    const page = res.json() as MessagePage;
+    expect(page.messages.map((m) => m.content)).toEqual(['first', 'second']);
+    expect(page.nextBefore).toBeNull();
+  });
+
+  it('paginates backward with the before cursor', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const convId = await createHumanConversation(alice.id, bob.id);
+    for (let i = 0; i < 3; i++) {
+      await insertMessage(convId, bob.id, `m${i}`, {
+        createdAt: new Date(Date.UTC(2026, 2, 1, 0, i)),
+      });
+    }
+
+    const first = (
+      await app.inject({
+        method: 'GET',
+        url: `/conversations/${convId}/messages?limit=2`,
+        headers: { cookie: alice.cookie },
+      })
+    ).json() as MessagePage;
+    expect(first.messages.map((m) => m.content)).toEqual(['m1', 'm2']);
+    expect(first.nextBefore).not.toBeNull();
+
+    const second = (
+      await app.inject({
+        method: 'GET',
+        url: `/conversations/${convId}/messages?limit=2&before=${first.nextBefore}`,
+        headers: { cookie: alice.cookie },
+      })
+    ).json() as MessagePage;
+    expect(second.messages.map((m) => m.content)).toEqual(['m0']);
+    expect(second.nextBefore).toBeNull();
+  });
+
+  it('404s for a non-participant', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const carol = await createUserWithSession('carol');
+    const convId = await createHumanConversation(bob.id, carol.id);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/conversations/${convId}/messages`,
+      headers: { cookie: alice.cookie },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});
+
+describe('POST /conversations/:id/read', () => {
+  const CSRF = 'csrf-double-submit-value';
+  const authed = (cookie: string) => ({
+    cookie: `${cookie}; ${CSRF_COOKIE_NAME}=${CSRF}`,
+    [CSRF_HEADER_NAME]: CSRF,
+  });
+
+  it('requires the double-submit CSRF token', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const convId = await createHumanConversation(alice.id, bob.id);
+    const m = await insertMessage(convId, bob.id, 'hi');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/conversations/${convId}/read`,
+      headers: { cookie: alice.cookie }, // no CSRF
+      payload: { messageId: m.id },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe('csrf_failure');
+  });
+
+  it('advances the cursor and clears unread', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const convId = await createHumanConversation(alice.id, bob.id);
+    await insertMessage(convId, bob.id, 'one', {
+      createdAt: new Date('2026-03-01T00:00:00Z'),
+    });
+    const last = await insertMessage(convId, bob.id, 'two', {
+      createdAt: new Date('2026-03-01T00:01:00Z'),
+    });
+
+    let body = (await listFor(alice.cookie)).json() as ConversationListResponse;
+    expect(body.conversations[0]!.unreadCount).toBe(2);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/conversations/${convId}/read`,
+      headers: authed(alice.cookie),
+      payload: { messageId: last.id },
+    });
+    expect(res.statusCode).toBe(204);
+
+    body = (await listFor(alice.cookie)).json() as ConversationListResponse;
+    expect(body.conversations[0]!.unreadCount).toBe(0);
+  });
+
+  it('404s when the message is not in the conversation', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const convId = await createHumanConversation(alice.id, bob.id);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/conversations/${convId}/read`,
+      headers: authed(alice.cookie),
+      payload: { messageId: randomUUID() },
+    });
+    expect(res.statusCode).toBe(404);
   });
 });

@@ -168,21 +168,38 @@ a shared store (Redis/Postgres) before running multiple machines — and it is a
 fixed window, not the §6 exponential backoff. The same primitive should later
 cover username lookup, message send, and bot invocation.
 
-#### Conversations (§2)
+#### Conversations & messages (§2/§3/§4)
 
-`GET /conversations` (session required) returns the caller's list
-(`ConversationListResponse`), newest activity first:
+All routes require a session (`requireSession` preHandler in
+`src/auth/guards.ts`, which attaches `request.authUser`); state-changing routes
+also require the double-submit CSRF token (`requireCsrf`). Backing tables:
+`conversations` + `conversation_participants` (migration 004), `messages` + a
+per-participant last-seen cursor (migration 005).
+
+- `GET /conversations` — the caller's list (`ConversationListResponse`), newest
+  first; each row carries peer, last-message preview, and unread count.
+- `GET /conversations/:id` — one summary (`ConversationResponse`); 404 (generic)
+  when it's absent or the caller isn't a participant.
+- `GET /conversations/:id/messages?before=<id>&limit=<n>` — backward history page
+  (`MessagePage`), oldest-first within the page; `before` is a prior page's
+  `nextBefore` cursor.
+- `POST /conversations/:id/read` `{ messageId }` — advance the last-seen cursor
+  (§7); `204`. CSRF-protected.
 
 ```bash
-curl -s -b "$JAR" http://localhost:8080/conversations   # 401 without the session cookie
+curl -s -b "$JAR" http://localhost:8080/conversations
+curl -s -b "$JAR" http://localhost:8080/conversations/$CONV
+curl -s -b "$JAR" "http://localhost:8080/conversations/$CONV/messages?limit=50"
+CSRF=$(awk '$6=="csrf_token"{print $7}' "$JAR")
+curl -s -o /dev/null -w '%{http_code}\n' -b "$JAR" -X POST \
+  http://localhost:8080/conversations/$CONV/read \
+  -H "X-CSRF-Token: $CSRF" -H 'Content-Type: application/json' \
+  -d "{\"messageId\":\"$MSG\"}"
 ```
 
-Backed by `conversations` + `conversation_participants` (migration 004); a peer
-resolves to the other human participant or a system bot from
-`src/bots/registry.ts`. `lastMessage`/`unreadCount` are placeholders (null / 0)
-until messaging + last-seen cursors land (P1). Authenticated routes use the
-`requireSession` preHandler (`src/auth/guards.ts`), which attaches
-`request.authUser`.
+Peers resolve to the other human or a system bot (`src/bots/registry.ts`).
+Message **creation** is over the WebSocket (next PR); the above is the read side.
+A message's `sender_id` is the human's account id or a bot slug.
 
 ### Database scripts & migrations
 
