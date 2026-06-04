@@ -7,6 +7,7 @@ import {
 } from '@chatapp/shared';
 import { buildApp } from '../app.js';
 import { query, closePool } from '../db/pool.js';
+import { generateToken } from '../auth/tokens.js';
 
 // Exercises the §1 auth flow end-to-end against the dedicated test database
 // (provisioned in global-setup) — the curl flow from apps/server/CLAUDE.md,
@@ -213,5 +214,168 @@ describe('POST /auth/logout', () => {
       headers: { cookie },
     });
     expect(me.statusCode).toBe(401);
+  });
+});
+
+async function accountIdByUsername(username = 'alice'): Promise<string> {
+  const { rows } = await query<{ id: string }>(
+    'SELECT id FROM accounts WHERE username = $1',
+    [username],
+  );
+  if (!rows[0]) throw new Error(`no account ${username}`);
+  return rows[0].id;
+}
+
+// Mints a verification token for an account and returns the RAW value. The route
+// only ever sees the raw token (the DB stores its hash), so tests generate their
+// own rather than scraping the logged link.
+async function insertVerificationToken(
+  accountId: string,
+  { expired = false } = {},
+): Promise<string> {
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + (expired ? -60_000 : 60_000));
+  await query(
+    `INSERT INTO email_verification_tokens (token_hash, account_id, expires_at)
+     VALUES ($1, $2, $3)`,
+    [token.hash, accountId, expiresAt],
+  );
+  return token.raw;
+}
+
+async function tokenCount(accountId: string): Promise<number> {
+  const { rows } = await query<{ count: string }>(
+    'SELECT count(*)::text AS count FROM email_verification_tokens WHERE account_id = $1',
+    [accountId],
+  );
+  return Number(rows[0]?.count ?? '0');
+}
+
+describe('POST /auth/verify-email', () => {
+  it('verifies a valid token and closes the signup -> verify -> login loop', async () => {
+    await signup(); // unverified
+    const id = await accountIdByUsername();
+    const raw = await insertVerificationToken(id);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-email',
+      payload: { token: raw },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('');
+
+    const { rows } = await query<{ verified: boolean }>(
+      'SELECT verified FROM accounts WHERE id = $1',
+      [id],
+    );
+    expect(rows[0]?.verified).toBe(true);
+    expect(await tokenCount(id)).toBe(0); // all tokens consumed
+
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { username: 'alice', password: PASSWORD },
+    });
+    expect(loginRes.statusCode).toBe(200);
+  });
+
+  it('rejects a malformed token with validation_error', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-email',
+      payload: { token: 'short' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('validation_error');
+  });
+
+  it('rejects a well-formed but unknown token with 400 invalid_token', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-email',
+      payload: { token: generateToken().raw },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('invalid_token');
+  });
+
+  it('rejects and prunes an expired token with 410 expired_token', async () => {
+    await signup(); // creates one (live) token
+    const id = await accountIdByUsername();
+    const raw = await insertVerificationToken(id, { expired: true });
+    expect(await tokenCount(id)).toBe(2);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-email',
+      payload: { token: raw },
+    });
+    expect(res.statusCode).toBe(410);
+    expect(res.json().error.code).toBe('expired_token');
+
+    const { rows } = await query<{ verified: boolean }>(
+      'SELECT verified FROM accounts WHERE id = $1',
+      [id],
+    );
+    expect(rows[0]?.verified).toBe(false);
+    expect(await tokenCount(id)).toBe(1); // only the expired one was pruned
+  });
+});
+
+describe('POST /auth/verify-email/resend', () => {
+  it('reissues a fresh token for an unverified account', async () => {
+    await signup();
+    const id = await accountIdByUsername();
+    const before = await query<{ token_hash: string }>(
+      'SELECT token_hash FROM email_verification_tokens WHERE account_id = $1',
+      [id],
+    );
+    const originalHash = before.rows[0]?.token_hash;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-email/resend',
+      payload: { email: 'alice@example.com' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    expect(await tokenCount(id)).toBe(1); // replaced, not accumulated
+    const after = await query<{ token_hash: string; expires_at: Date }>(
+      'SELECT token_hash, expires_at FROM email_verification_tokens WHERE account_id = $1',
+      [id],
+    );
+    expect(after.rows[0]?.token_hash).not.toBe(originalHash);
+    expect(after.rows[0]!.expires_at.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('returns a generic 200 for an unknown email and creates nothing', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-email/resend',
+      payload: { email: 'nobody@example.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    const { rows } = await query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM accounts',
+    );
+    expect(rows[0]?.count).toBe('0');
+  });
+
+  it('does not reissue for an already-verified account', async () => {
+    await signup();
+    const id = await accountIdByUsername();
+    await query('UPDATE accounts SET verified = true WHERE id = $1', [id]);
+    await query('DELETE FROM email_verification_tokens WHERE account_id = $1', [
+      id,
+    ]);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-email/resend',
+      payload: { email: 'alice@example.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(await tokenCount(id)).toBe(0);
   });
 });
