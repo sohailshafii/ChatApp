@@ -8,15 +8,20 @@ import {
   conversationListResponseSchema,
   conversationResponseSchema,
   messagePageSchema,
+  botListResponseSchema,
+  startConversationResponseSchema,
   type ConversationListResponse,
   type ConversationResponse,
   type MessagePage,
+  type BotListResponse,
+  type StartConversationResponse,
 } from '@chatapp/shared';
 import { buildApp } from '../app.js';
 import { query, closePool } from '../db/pool.js';
 import { hashPassword } from '../auth/passwords.js';
 import { createSession } from '../auth/sessions.js';
-import { getBot } from '../bots/registry.js';
+import { getBot, listBots } from '../bots/registry.js';
+import { createMessage } from '../conversations/messages.js';
 
 let app: FastifyInstance;
 
@@ -382,5 +387,172 @@ describe('POST /conversations/:id/read', () => {
       payload: { messageId: randomUUID() },
     });
     expect(res.statusCode).toBe(404);
+  });
+});
+
+const CSRF_VALUE = 'csrf-double-submit-value';
+function csrfHeaders(cookie: string): Record<string, string> {
+  return {
+    cookie: `${cookie}; ${CSRF_COOKIE_NAME}=${CSRF_VALUE}`,
+    [CSRF_HEADER_NAME]: CSRF_VALUE,
+  };
+}
+
+describe('GET /bots', () => {
+  it('returns the system bot registry (matches the wire schema)', async () => {
+    const alice = await createUserWithSession('alice');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/bots',
+      headers: { cookie: alice.cookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(botListResponseSchema.safeParse(res.json()).success).toBe(true);
+    expect((res.json() as BotListResponse).bots.map((b) => b.id)).toEqual(
+      listBots().map((b) => b.id),
+    );
+  });
+
+  it('401s without a session', async () => {
+    expect((await app.inject({ method: 'GET', url: '/bots' })).statusCode).toBe(401);
+  });
+});
+
+describe('POST /conversations', () => {
+  const start = (cookie: string, payload: Record<string, unknown>) =>
+    app.inject({ method: 'POST', url: '/conversations', headers: csrfHeaders(cookie), payload });
+
+  it('starts a human conversation and is idempotent', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+
+    const first = await start(alice.cookie, { peerKind: 'human', username: 'bob' });
+    expect(first.statusCode).toBe(200);
+    expect(startConversationResponseSchema.safeParse(first.json()).success).toBe(true);
+    const c1 = (first.json() as StartConversationResponse).conversation;
+    expect(c1.peer).toEqual({ kind: 'human', id: bob.id, username: 'bob' });
+
+    const second = await start(alice.cookie, { peerKind: 'human', username: 'bob' });
+    expect((second.json() as StartConversationResponse).conversation.id).toBe(c1.id);
+
+    const { rows } = await query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM conversations',
+    );
+    expect(rows[0]!.n).toBe(1); // not duplicated
+  });
+
+  it('starts a bot conversation', async () => {
+    const alice = await createUserWithSession('alice');
+    const res = await start(alice.cookie, { peerKind: 'bot', botId: 'assistant' });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as StartConversationResponse).conversation.peer).toEqual({
+      kind: 'bot',
+      id: 'assistant',
+      name: getBot('assistant')!.name,
+    });
+  });
+
+  it('returns generic not_found for unknown/unverified user, self, and unknown bot', async () => {
+    const alice = await createUserWithSession('alice');
+    await query(
+      `INSERT INTO accounts (username, email, password_hash, verified)
+       VALUES ('bob', 'bob@example.com', 'x', false)`,
+    );
+    for (const payload of [
+      { peerKind: 'human', username: 'ghost' },
+      { peerKind: 'human', username: 'bob' }, // exists but unverified
+      { peerKind: 'human', username: 'alice' }, // self
+      { peerKind: 'bot', botId: 'nope' },
+    ]) {
+      const res = await start(alice.cookie, payload);
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error.code).toBe('not_found');
+    }
+  });
+
+  it('requires CSRF and a session', async () => {
+    const alice = await createUserWithSession('alice');
+    const noCsrf = await app.inject({
+      method: 'POST',
+      url: '/conversations',
+      headers: { cookie: alice.cookie },
+      payload: { peerKind: 'human', username: 'bob' },
+    });
+    expect(noCsrf.statusCode).toBe(403);
+    const anon = await app.inject({
+      method: 'POST',
+      url: '/conversations',
+      payload: { peerKind: 'human', username: 'bob' },
+    });
+    expect(anon.statusCode).toBe(401);
+  });
+});
+
+describe('DELETE /conversations/:id', () => {
+  it('hides from the caller but not the peer; new activity un-hides', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const convId = await createHumanConversation(alice.id, bob.id);
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/conversations/${convId}`,
+      headers: csrfHeaders(alice.cookie),
+    });
+    expect(del.statusCode).toBe(204);
+
+    expect((await listFor(alice.cookie)).json().conversations).toEqual([]);
+    expect((await listFor(bob.cookie)).json().conversations).toHaveLength(1);
+
+    // A new message re-surfaces it for alice.
+    await createMessage({
+      conversationId: convId,
+      senderId: bob.id,
+      content: 'back?',
+      clientMessageId: 'm1',
+    });
+    expect((await listFor(alice.cookie)).json().conversations).toHaveLength(1);
+  });
+
+  it('un-hides when the conversation is started again', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const convId = await createHumanConversation(alice.id, bob.id);
+    await app.inject({
+      method: 'DELETE',
+      url: `/conversations/${convId}`,
+      headers: csrfHeaders(alice.cookie),
+    });
+    expect((await listFor(alice.cookie)).json().conversations).toEqual([]);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/conversations',
+      headers: csrfHeaders(alice.cookie),
+      payload: { peerKind: 'human', username: 'bob' },
+    });
+    expect((res.json() as StartConversationResponse).conversation.id).toBe(convId);
+    expect((await listFor(alice.cookie)).json().conversations).toHaveLength(1);
+  });
+
+  it('404s for a non-participant and requires CSRF', async () => {
+    const alice = await createUserWithSession('alice');
+    const bob = await createUserWithSession('bob');
+    const carol = await createUserWithSession('carol');
+    const convId = await createHumanConversation(bob.id, carol.id);
+
+    const notMine = await app.inject({
+      method: 'DELETE',
+      url: `/conversations/${convId}`,
+      headers: csrfHeaders(alice.cookie),
+    });
+    expect(notMine.statusCode).toBe(404);
+
+    const noCsrf = await app.inject({
+      method: 'DELETE',
+      url: `/conversations/${convId}`,
+      headers: { cookie: alice.cookie },
+    });
+    expect(noCsrf.statusCode).toBe(403);
   });
 });

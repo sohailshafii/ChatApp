@@ -4,6 +4,7 @@ import { loadConfig } from './config.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerConversationRoutes } from './routes/conversations.js';
+import { registerBotRoutes } from './routes/bots.js';
 import { registerWebSocket } from './ws/server.js';
 
 // Builds the Fastify instance with routes registered but without listening, so
@@ -25,6 +26,7 @@ export function buildApp(): FastifyInstance {
   registerHealthRoutes(app);
   registerAuthRoutes(app);
   registerConversationRoutes(app);
+  registerBotRoutes(app);
   registerWebSocket(app);
 
   return app;

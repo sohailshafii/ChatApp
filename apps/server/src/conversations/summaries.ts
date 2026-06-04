@@ -51,7 +51,7 @@ function summarySql(filterById: boolean): string {
                     FROM messages lr WHERE lr.id = me.last_read_message_id
                 ))
       ) uc ON true
-     ${filterById ? 'WHERE c.id = $2' : ''}
+     ${filterById ? 'WHERE c.id = $2' : 'WHERE NOT me.hidden'}
      ORDER BY c.updated_at DESC
   `;
 }
