@@ -26,16 +26,22 @@ All commands run from the **repo root**. Install once with `npm install`.
 
 ### Build & typecheck (the test gate)
 
-There is no test framework yet (added at first real need — see root CLAUDE.md),
-so typecheck + a production build are the gate every change must pass:
+Every change must pass typecheck, unit tests, and a production build:
 
 ```bash
 npm run typecheck --workspace=@chatapp/web   # tsc --noEmit, strict
+npm run test --workspace=@chatapp/web        # vitest run (use test:watch while developing)
 npm run build --workspace=@chatapp/web       # vite build; also prints the gzipped bundle size
 ```
 
 The build output reports the gzipped JS size — keep the app shell **≤ 300 KB
 gzipped** (see Conventions). Treat a regression past the budget as a bug.
+
+**Tests** use **Vitest** (added when unit tests were first needed — see root
+CLAUDE.md). They live next to the code as `*.test.ts` and run in a Node
+environment; `vitest.config.ts` holds the config. Pure logic (e.g. the API
+client) is tested by stubbing `fetch`/`document` — no jsdom. If component tests
+arrive, add a DOM environment (jsdom/happy-dom) at that point rather than now.
 
 ### Run the app in a browser
 
