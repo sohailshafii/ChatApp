@@ -12,6 +12,9 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     globalSetup: ['./src/test/global-setup.ts'],
+    // Integration test files share the one chatapp_test database, so run files
+    // serially — otherwise their TRUNCATE-based cleanup races across files.
+    fileParallelism: false,
     // Test DB for workers; silence Fastify's per-request logs to keep output clean.
     env: { DATABASE_URL: testDbUrl(), LOG_LEVEL: 'silent' },
     // argon2 hashing in the auth tests is ~250ms each; give some headroom.

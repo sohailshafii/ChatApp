@@ -168,6 +168,22 @@ a shared store (Redis/Postgres) before running multiple machines — and it is a
 fixed window, not the §6 exponential backoff. The same primitive should later
 cover username lookup, message send, and bot invocation.
 
+#### Conversations (§2)
+
+`GET /conversations` (session required) returns the caller's list
+(`ConversationListResponse`), newest activity first:
+
+```bash
+curl -s -b "$JAR" http://localhost:8080/conversations   # 401 without the session cookie
+```
+
+Backed by `conversations` + `conversation_participants` (migration 004); a peer
+resolves to the other human participant or a system bot from
+`src/bots/registry.ts`. `lastMessage`/`unreadCount` are placeholders (null / 0)
+until messaging + last-seen cursors land (P1). Authenticated routes use the
+`requireSession` preHandler (`src/auth/guards.ts`), which attaches
+`request.authUser`.
+
 ### Database scripts & migrations
 
 - `npm run db:down` (stop), `npm run db:reset` (drops the volume — **wipes all
