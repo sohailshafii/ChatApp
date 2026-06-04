@@ -29,6 +29,9 @@ export type Config = {
   databaseUrl: string;
   appBaseUrl: string;
   resendApiKey: string | undefined;
+  // Whether auth cookies get the Secure attribute. Derived from APP_BASE_URL's
+  // scheme: off for local http dev, on for https (prod). See §6.
+  cookieSecure: boolean;
 };
 
 let cached: Config | undefined;
@@ -52,6 +55,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: e.DATABASE_URL,
     appBaseUrl: e.APP_BASE_URL,
     resendApiKey: e.RESEND_API_KEY,
+    cookieSecure: e.APP_BASE_URL.startsWith('https'),
   };
   return cached;
 }
