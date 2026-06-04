@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import {
   signupRequestSchema,
   loginRequestSchema,
+  verifyEmailRequestSchema,
+  resendVerificationRequestSchema,
   SESSION_COOKIE_NAME,
   CSRF_COOKIE_NAME,
   CSRF_HEADER_NAME,
@@ -10,7 +12,11 @@ import {
 } from '@chatapp/shared';
 import { getPool, query } from '../db/pool.js';
 import { hashPassword, verifyPassword } from '../auth/passwords.js';
-import { generateToken, EMAIL_VERIFICATION_TTL_MS } from '../auth/tokens.js';
+import {
+  generateToken,
+  hashToken,
+  EMAIL_VERIFICATION_TTL_MS,
+} from '../auth/tokens.js';
 import {
   createSession,
   deleteSession,
@@ -204,6 +210,127 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     await deleteSession(token);
     clearAuthCookies(reply);
     return reply.code(204).send();
+  });
+
+  // POST /auth/verify-email (§1). Consumes a verification token, marks the
+  // account verified, and invalidates the account's remaining tokens.
+  app.post('/auth/verify-email', async (request, reply) => {
+    const parsed = verifyEmailRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(
+        reply,
+        'validation_error',
+        parsed.error.issues[0]?.message ?? 'Invalid verification request',
+      );
+    }
+    const tokenHash = hashToken(parsed.data.token);
+
+    const { rows } = await query<{ account_id: string; expires_at: Date }>(
+      `SELECT account_id, expires_at
+         FROM email_verification_tokens
+        WHERE token_hash = $1`,
+      [tokenHash],
+    );
+    const record = rows[0];
+    if (!record) {
+      return sendError(reply, 'invalid_token', 'This verification link is invalid');
+    }
+    if (record.expires_at.getTime() <= Date.now()) {
+      // Prune the dead token; the user must request a fresh link.
+      await query('DELETE FROM email_verification_tokens WHERE token_hash = $1', [
+        tokenHash,
+      ]);
+      return sendError(
+        reply,
+        'expired_token',
+        'This verification link has expired; request a new one',
+      );
+    }
+
+    // Mark verified and consume all of the account's verification tokens
+    // atomically — once verified, any outstanding links are moot.
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE accounts SET verified = true WHERE id = $1', [
+        record.account_id,
+      ]);
+      await client.query(
+        'DELETE FROM email_verification_tokens WHERE account_id = $1',
+        [record.account_id],
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      request.log.error({ err }, 'email verification failed');
+      return sendError(reply, 'internal_error', 'Could not verify email');
+    } finally {
+      client.release();
+    }
+
+    return reply.code(200).send();
+  });
+
+  // POST /auth/verify-email/resend (§1). Re-issues a verification link. Always
+  // 200 with an empty body — it never reveals whether the email is registered
+  // or already verified (anti-enumeration). Note: this is an email-spam vector,
+  // so it must get rate limiting when that primitive lands (§6).
+  app.post('/auth/verify-email/resend', async (request, reply) => {
+    const parsed = resendVerificationRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(
+        reply,
+        'validation_error',
+        parsed.error.issues[0]?.message ?? 'Invalid resend request',
+      );
+    }
+    const { email } = parsed.data;
+
+    const { rows } = await query<{ id: string; verified: boolean }>(
+      'SELECT id, verified FROM accounts WHERE email = $1',
+      [email],
+    );
+    const account = rows[0];
+
+    // Only do real work for an existing, still-unverified account; otherwise
+    // fall through to the same generic 200.
+    if (account && !account.verified) {
+      const token = generateToken();
+      const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS);
+
+      let stored = false;
+      const client = await getPool().connect();
+      try {
+        await client.query('BEGIN');
+        // Replace outstanding tokens so only the newest link works.
+        await client.query(
+          'DELETE FROM email_verification_tokens WHERE account_id = $1',
+          [account.id],
+        );
+        await client.query(
+          `INSERT INTO email_verification_tokens (token_hash, account_id, expires_at)
+           VALUES ($1, $2, $3)`,
+          [token.hash, account.id, expiresAt],
+        );
+        await client.query('COMMIT');
+        stored = true;
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        request.log.error({ err }, 'verification resend failed');
+      } finally {
+        client.release();
+      }
+
+      if (stored) {
+        try {
+          await sendVerificationEmail(request.log, email, token.raw);
+        } catch (err) {
+          request.log.error({ err }, 'verification email dispatch failed');
+        }
+      }
+    }
+
+    return reply.code(200).send();
   });
 }
 

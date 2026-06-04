@@ -84,6 +84,19 @@ docker exec -it chatapp-postgres psql -U chatapp -d chatapp \
   -c 'SELECT username, email, verified FROM accounts;'
 ```
 
+Verify the account using that token, or request a fresh link:
+
+```bash
+TOKEN=…   # the token from the logged /verify-email?token=… URL
+# 200 on success; validation_error (400, malformed) / invalid_token (400) / expired_token (410):
+curl -i -X POST http://localhost:8080/auth/verify-email \
+  -H 'Content-Type: application/json' -d "{\"token\":\"$TOKEN\"}"
+
+# Resend — always 200, never reveals whether the email is registered/verified:
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/auth/verify-email/resend \
+  -H 'Content-Type: application/json' -d '{"email":"alice@example.com"}'
+```
+
 #### Login, session & logout
 
 Login needs a **verified** account. Without a mail provider, mark one verified
