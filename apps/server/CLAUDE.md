@@ -155,6 +155,19 @@ curl -i -X POST http://localhost:8080/auth/password-reset/confirm \
   -d "{\"token\":\"$TOKEN\",\"newPassword\":\"a brand new passphrase\"}"
 ```
 
+#### Rate limiting
+
+Auth endpoints are rate limited (§6) by a single in-memory primitive in
+`src/rate-limit/`. `signup`, `login`, `verify-email/resend`, and
+`password-reset/request` are capped **per-IP** (and **per-account** where the
+body carries an identifier) over a 10-minute window; exceeding a cap returns
+**429** with `{"error":{"code":"rate_limited",…}}`. Limits live in `AUTH_LIMITS`.
+
+Two known simplifications (follow-ups): the store is **per-process** — move it to
+a shared store (Redis/Postgres) before running multiple machines — and it is a
+fixed window, not the §6 exponential backoff. The same primitive should later
+cover username lookup, message send, and bot invocation.
+
 ### Database scripts & migrations
 
 - `npm run db:down` (stop), `npm run db:reset` (drops the volume — **wipes all
