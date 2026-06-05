@@ -443,10 +443,17 @@ describe('WebSocket bot replies (§3)', () => {
     while (frame.type === 'bot_chunk') frame = await a.next();
     expect(frame.type).toBe('bot_end');
 
-    const used = await query<{ tokens_used: string }>(
-      'SELECT tokens_used FROM bot_usage WHERE account_id = $1',
-      [alice.id],
-    );
-    expect(Number(used.rows[0]!.tokens_used)).toBe(8); // 3 input + 5 output
+    // Usage is recorded after bot_end (best-effort, fire-and-forget), so poll
+    // briefly for the row rather than racing the write.
+    let tokens = 0;
+    for (let i = 0; i < 20 && tokens === 0; i++) {
+      const used = await query<{ tokens_used: string }>(
+        'SELECT tokens_used FROM bot_usage WHERE account_id = $1',
+        [alice.id],
+      );
+      tokens = used.rows[0] ? Number(used.rows[0].tokens_used) : 0;
+      if (tokens === 0) await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(tokens).toBe(8); // 3 input + 5 output
   });
 });
