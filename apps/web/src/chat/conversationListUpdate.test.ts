@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ConversationSummary, Message, ServerWsMessage } from '@chatapp/shared';
-import { applyFrameToConversations } from './conversationListUpdate';
+import {
+  applyFrameToConversations,
+  frameTargetsUnknownConversation,
+} from './conversationListUpdate';
 
 function conv(over: Partial<ConversationSummary> = {}): ConversationSummary {
   return {
@@ -72,5 +75,41 @@ describe('applyFrameToConversations', () => {
     expect(
       applyFrameToConversations(list, { type: 'bot_chunk', conversationId: 'c1', messageId: 'm1', delta: 'x' }),
     ).toBe(list);
+  });
+});
+
+describe('frameTargetsUnknownConversation', () => {
+  it('is true for an effect frame whose conversation is not loaded', () => {
+    const list = [conv({ id: 'c1' })];
+    const frame: ServerWsMessage = { type: 'message', message: message({ conversationId: 'new' }) };
+    expect(frameTargetsUnknownConversation(list, frame)).toBe(true);
+  });
+
+  it('is false when the conversation is already loaded', () => {
+    const list = [conv({ id: 'c1' })];
+    const frame: ServerWsMessage = { type: 'message', message: message({ conversationId: 'c1' }) };
+    expect(frameTargetsUnknownConversation(list, frame)).toBe(false);
+  });
+
+  it('is true for our own ack in an unknown conversation (e.g. started on another tab)', () => {
+    const list = [conv({ id: 'c1' })];
+    const frame: ServerWsMessage = {
+      type: 'ack',
+      clientMessageId: 'x',
+      message: message({ conversationId: 'new' }),
+    };
+    expect(frameTargetsUnknownConversation(list, frame)).toBe(true);
+  });
+
+  it('is false for frames with no list effect, even if the id is unknown', () => {
+    const list = [conv({ id: 'c1' })];
+    expect(
+      frameTargetsUnknownConversation(list, {
+        type: 'bot_chunk',
+        conversationId: 'new',
+        messageId: 'm1',
+        delta: 'x',
+      }),
+    ).toBe(false);
   });
 });
