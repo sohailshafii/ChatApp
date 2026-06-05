@@ -1,13 +1,16 @@
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { closePool } from './db/pool.js';
+import { startSessionSweeper } from './auth/session-sweeper.js';
 
 async function main(): Promise<void> {
   const { host, port } = loadConfig();
   const app = buildApp();
 
+  let stopSweeper: (() => void) | undefined;
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'shutting down');
+    stopSweeper?.();
     await app.close();
     await closePool();
     process.exit(0);
@@ -17,6 +20,8 @@ async function main(): Promise<void> {
 
   try {
     await app.listen({ host, port });
+    // Start the periodic expired-session cleanup once we're listening (§7).
+    stopSweeper = startSessionSweeper(app.log);
   } catch (err) {
     app.log.error(err, 'failed to start server');
     process.exit(1);

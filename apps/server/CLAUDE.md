@@ -133,7 +133,13 @@ Cookie/header names are exported from `@chatapp/shared`
 (`SESSION_COOKIE_NAME`, `CSRF_COOKIE_NAME`, `CSRF_HEADER_NAME`) so client and
 server can't drift. Sessions use a 30-day sliding expiry (each authenticated
 request bumps `last_active_at`); inspect them with
-`SELECT account_id, last_active_at FROM sessions;`.
+`SELECT account_id, last_active_at FROM sessions;`. `touchSession` *rejects* rows
+past the window; a **session sweeper** (`src/auth/session-sweeper.ts`,
+`startSessionSweeper`, started from `index.ts` after listen, every 6h + once at
+boot) *deletes* them via `sweepExpiredSessions`. It's an in-process unref'd
+interval (per-machine; a single scheduled job is the cleaner multi-machine home,
+alongside the rate-limit shared-store move) and is wired only in the entrypoint,
+so tests using `buildApp()` don't spin up a timer.
 
 #### Password reset
 
