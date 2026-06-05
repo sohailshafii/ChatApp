@@ -6,6 +6,7 @@ import { SignupPage } from './pages/SignupPage';
 import { LoginPage } from './pages/LoginPage';
 import { ConversationPage } from './pages/ConversationPage';
 import { NewConversationPage } from './pages/NewConversationPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { ResendVerificationPage } from './pages/ResendVerificationPage';
 import { PasswordResetRequestPage } from './pages/PasswordResetRequestPage';
@@ -21,6 +22,7 @@ export function App() {
           <Route index element={<HomePage />} />
           <Route path="conversations/new" element={<NewConversationPage />} />
           <Route path="conversations/:id" element={<ConversationPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
 
         {/* Guest-only: authenticated users are bounced home. */}

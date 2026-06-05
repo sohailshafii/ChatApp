@@ -20,6 +20,12 @@ interface AuthContextValue {
   setUser: (user: AccountUser) => void;
   /** Clear the session server-side and locally. */
   logout: () => Promise<void>;
+  /**
+   * Drop local auth state without a network call. For flows where the session
+   * is already gone server-side (e.g. account deletion), so we don't fire a
+   * doomed /auth/logout against a destroyed session.
+   */
+  clearSession: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -52,6 +58,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('authenticated');
   }
 
+  function clearSession() {
+    setUserState(null);
+    setStatus('unauthenticated');
+  }
+
   async function logout() {
     try {
       await logoutRequest();
@@ -65,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ status, user, setUser, logout }}>
+    <AuthContext.Provider value={{ status, user, setUser, logout, clearSession }}>
       {children}
     </AuthContext.Provider>
   );

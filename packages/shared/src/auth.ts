@@ -72,3 +72,18 @@ export const meResponseSchema = z.object({
   user: accountUserSchema,
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
+
+// --- Account deletion (§6) ---
+// DELETE /auth/account — re-authenticates with the current password, then
+// performs an immediate hard delete: anonymizes the user in human-conversation
+// history ("Deleted user"), hard-deletes bot conversations, and removes session
+// tokens + push subscriptions. The body carries the password (a DELETE with a
+// body, matching the resource-deletion verb used elsewhere, e.g.
+// DELETE /conversations/:id). Session cookie still required.
+//
+// Success: 200 with empty body; the server destroys the session. A wrong
+// password is reported as `invalid_credentials`.
+export const deleteAccountRequestSchema = z.object({
+  password: passwordSchema,
+});
+export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
