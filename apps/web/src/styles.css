@@ -296,6 +296,61 @@ a {
   border-color: var(--color-error);
 }
 
+/* Button rendered as a link (e.g. "New") */
+a.btn-primary {
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
+}
+
+/* Conversation list / new-conversation page */
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.section-title {
+  font-size: 1rem;
+  margin: 1.75rem 0 0.5rem;
+}
+
+.bot-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bot-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.bot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.bot-name {
+  font-weight: 600;
+}
+
+.bot-description {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
 .app-main {
   padding: 1.5rem 1.25rem;
 }

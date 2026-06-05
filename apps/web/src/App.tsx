@@ -5,6 +5,7 @@ import { HomePage } from './pages/HomePage';
 import { SignupPage } from './pages/SignupPage';
 import { LoginPage } from './pages/LoginPage';
 import { ConversationPage } from './pages/ConversationPage';
+import { NewConversationPage } from './pages/NewConversationPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { ResendVerificationPage } from './pages/ResendVerificationPage';
 import { PasswordResetRequestPage } from './pages/PasswordResetRequestPage';
@@ -18,6 +19,7 @@ export function App() {
         {/* Requires a session. */}
         <Route element={<RequireAuth />}>
           <Route index element={<HomePage />} />
+          <Route path="conversations/new" element={<NewConversationPage />} />
           <Route path="conversations/:id" element={<ConversationPage />} />
         </Route>
 

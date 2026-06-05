@@ -2,6 +2,8 @@ import type {
   ConversationListResponse,
   ConversationResponse,
   MessagePage,
+  StartConversationRequest,
+  StartConversationResponse,
 } from '@chatapp/shared';
 import { apiFetch } from './client';
 
@@ -17,6 +19,20 @@ export async function listConversations(): Promise<ConversationListResponse> {
 /** GET /conversations/:id — a single conversation's summary (peer, etc.). */
 export async function getConversation(id: string): Promise<ConversationResponse> {
   return apiFetch<ConversationResponse>(`/conversations/${id}`);
+}
+
+/**
+ * POST /conversations — start (or fetch the existing) conversation with a peer
+ * (§2). A failed human lookup throws `ApiError` with `not_found` (generic, to
+ * avoid username enumeration).
+ */
+export async function startConversation(
+  req: StartConversationRequest,
+): Promise<StartConversationResponse> {
+  return apiFetch<StartConversationResponse>('/conversations', {
+    method: 'POST',
+    body: req,
+  });
 }
 
 /**
