@@ -65,11 +65,13 @@ export const wsBotEndSchema = z.object({
 // Machine-readable reason a bot reply failed, so the client can branch without
 // string-matching the message. `provider_unavailable`: the upstream model/API
 // errored (network, timeout, 5xx, overload, bad key). `budget_exceeded`: the
-// per-user/day token budget (§cost) is spent — reserved now, enforced in a
-// later PR. `internal_error`: anything else.
+// per-user/day token budget (§cost) is spent. `rate_limited`: too many bot
+// invocations in a short window (§3/§6 per-user/per-bot burst guard) — transient,
+// retry shortly. `internal_error`: anything else.
 export const botErrorCodeSchema = z.enum([
   'provider_unavailable',
   'budget_exceeded',
+  'rate_limited',
   'internal_error',
 ]);
 export type BotErrorCode = z.infer<typeof botErrorCodeSchema>;

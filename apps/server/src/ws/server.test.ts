@@ -15,6 +15,11 @@ import {
   type BotUsage,
 } from '../bots/provider.js';
 import { DAILY_TOKEN_BUDGET } from '../bots/budget.js';
+import {
+  botLimiter,
+  botInvocationKey,
+  BOT_LIMITS,
+} from '../rate-limit/bot-rate-limit.js';
 
 const ORIGIN = loadConfig().appBaseUrl;
 
@@ -44,6 +49,7 @@ afterEach(async () => {
   }
   sockets.length = 0;
   setBotProvider(undefined); // clear any per-test provider override
+  botLimiter.reset(); // don't let a saturated bot-invocation window leak
   await query('TRUNCATE accounts, conversations RESTART IDENTITY CASCADE');
 });
 
@@ -426,6 +432,37 @@ describe('WebSocket bot replies (§3)', () => {
       [alice.id],
     );
     expect(Number(used.rows[0]!.tokens_used)).toBe(DAILY_TOKEN_BUDGET);
+  });
+
+  it('blocks with rate_limited once the per-bot invocation window is full', async () => {
+    const alice = await createUser('alice');
+    // Saturate the (user, bot) window directly so we don't send 20 WS frames.
+    const key = botInvocationKey(alice.id, 'assistant');
+    for (let i = 0; i < BOT_LIMITS.invoke.max; i++) botLimiter.check(key, BOT_LIMITS.invoke);
+
+    const conv = await createBotConversation(alice.id, 'assistant');
+    const a = connect(alice.token);
+    await a.opened();
+
+    a.send({ type: 'send', conversationId: conv, clientMessageId: 'c1', content: 'hi' });
+    expect((await a.next()).type).toBe('ack');
+    expect((await a.next()).type).toBe('bot_start');
+
+    const err = await a.next();
+    expect(err.type).toBe('bot_error');
+    expect(err.code).toBe('rate_limited');
+
+    // No reply persisted, and the budget was never touched (we never reached it).
+    const msgs = await query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM messages WHERE conversation_id = $1 AND sender_id = 'assistant'",
+      [conv],
+    );
+    expect(msgs.rows[0]!.n).toBe(0);
+    const used = await query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM bot_usage WHERE account_id = $1',
+      [alice.id],
+    );
+    expect(used.rows[0]!.n).toBe(0);
   });
 
   it('records the reply token usage against the daily budget', async () => {
