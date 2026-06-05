@@ -165,8 +165,9 @@ body carries an identifier) over a 10-minute window; exceeding a cap returns
 
 Two known simplifications (follow-ups): the store is **per-process** — move it to
 a shared store (Redis/Postgres) before running multiple machines — and it is a
-fixed window, not the §6 exponential backoff. The same primitive should later
-cover username lookup, message send, and bot invocation.
+fixed window, not the §6 exponential backoff. The same primitive also gates
+**bot invocation** (`src/rate-limit/bot-rate-limit.ts`, `BOT_LIMITS`, per
+`(user, bot)`); username lookup and message send are still to come.
 
 #### Conversations & messages (§2/§3/§4)
 
@@ -253,9 +254,15 @@ nothing — and **records after** a successful reply, adding the provider-report
 usage (`streamReply` returns `BotUsage` after its deltas: Anthropic
 `finalMessage().usage`, OpenAI `stream_options.include_usage`, the stub a length
 estimate). Soft fixed-window like the auth rate-limiter: the reply that crosses
-the cap completes, the next is blocked; counters persist across restarts. (Bot
-*invocation-rate* limiting via the shared in-memory primitive is still a separate
-follow-up.)
+the cap completes, the next is blocked; counters persist across restarts.
+
+**Invocation rate limit (§3/§6).** Separate from the daily token budget, a
+per-`(user, bot)` burst guard caps how fast bot replies can be requested
+(`src/rate-limit/bot-rate-limit.ts`, `BOT_LIMITS.invoke` = 20/60s placeholder,
+reusing the shared `RateLimiter`). Checked in the orchestrator **before** the
+budget (in-memory, cheaper than the DB read) and before any model call; over the
+limit emits `bot_error{code:'rate_limited'}` (after `bot_start`) and persists
+nothing. In-memory per-process (same shared-store caveat as auth).
 
 ### Database scripts & migrations
 

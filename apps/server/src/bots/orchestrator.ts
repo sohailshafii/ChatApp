@@ -13,6 +13,11 @@ import {
 } from './provider.js';
 import { systemPromptFor } from './registry.js';
 import { isOverBudget, recordUsage } from './budget.js';
+import {
+  botInvocationKey,
+  botLimiter,
+  BOT_LIMITS,
+} from '../rate-limit/bot-rate-limit.js';
 
 // Streams a bot reply for a send into a bot conversation (§3): bot_start ->
 // bot_chunk* -> bot_end, or bot_error. The message id is assigned up front so the
@@ -31,6 +36,22 @@ export async function streamBotReply(
   const messageId = randomUUID();
 
   broadcastToAccounts(targets, { type: 'bot_start', conversationId, messageId });
+
+  // §3/§6: burst guard on bot invocations, per (user, bot). Checked before the
+  // budget (in-memory, cheaper than the DB read) and before any model call. Like
+  // budget_exceeded, the bot_start above lets the client correlate by messageId.
+  if (
+    human &&
+    !botLimiter.check(botInvocationKey(human, botId), BOT_LIMITS.invoke)
+  ) {
+    broadcastToAccounts(targets, {
+      type: 'bot_error',
+      conversationId,
+      messageId,
+      code: 'rate_limited',
+    });
+    return;
+  }
 
   // §cost: block once the user is over their per-day token budget. The bot_start
   // above means the client correlates this rejection by messageId like any other
