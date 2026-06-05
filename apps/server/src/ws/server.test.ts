@@ -8,7 +8,13 @@ import { query, closePool } from '../db/pool.js';
 import { hashPassword } from '../auth/passwords.js';
 import { createSession } from '../auth/sessions.js';
 import { loadConfig } from '../config.js';
-import { BotError, setBotProvider, type BotProvider } from '../bots/provider.js';
+import {
+  BotError,
+  setBotProvider,
+  type BotProvider,
+  type BotUsage,
+} from '../bots/provider.js';
+import { DAILY_TOKEN_BUDGET } from '../bots/budget.js';
 
 const ORIGIN = loadConfig().appBaseUrl;
 
@@ -45,8 +51,18 @@ afterEach(async () => {
 function throwingProvider(err: unknown): BotProvider {
   return {
     // eslint-disable-next-line require-yield
-    async *streamReply() {
+    async *streamReply(): AsyncGenerator<string, BotUsage, void> {
       throw err;
+    },
+  };
+}
+
+// A provider that streams a fixed reply and reports a known token usage.
+function usageProvider(text: string, usage: BotUsage): BotProvider {
+  return {
+    async *streamReply(): AsyncGenerator<string, BotUsage, void> {
+      yield text;
+      return usage;
     },
   };
 }
@@ -377,5 +393,60 @@ describe('WebSocket bot replies (§3)', () => {
     const err = await a.next();
     expect(err.type).toBe('bot_error');
     expect(err.code).toBe('internal_error');
+  });
+
+  it('blocks with budget_exceeded when the user is over their daily budget', async () => {
+    const alice = await createUser('alice');
+    // Pre-seed today's usage at the cap.
+    await query(
+      `INSERT INTO bot_usage (account_id, usage_date, tokens_used)
+       VALUES ($1, (now() AT TIME ZONE 'utc')::date, $2)`,
+      [alice.id, DAILY_TOKEN_BUDGET],
+    );
+    const conv = await createBotConversation(alice.id, 'assistant');
+    const a = connect(alice.token);
+    await a.opened();
+
+    a.send({ type: 'send', conversationId: conv, clientMessageId: 'c1', content: 'hi' });
+    expect((await a.next()).type).toBe('ack');
+    expect((await a.next()).type).toBe('bot_start');
+
+    const err = await a.next();
+    expect(err.type).toBe('bot_error');
+    expect(err.code).toBe('budget_exceeded');
+
+    // No assistant reply persisted, and usage is unchanged (no model call).
+    const msgs = await query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM messages WHERE conversation_id = $1 AND sender_id = 'assistant'",
+      [conv],
+    );
+    expect(msgs.rows[0]!.n).toBe(0);
+    const used = await query<{ tokens_used: string }>(
+      'SELECT tokens_used FROM bot_usage WHERE account_id = $1',
+      [alice.id],
+    );
+    expect(Number(used.rows[0]!.tokens_used)).toBe(DAILY_TOKEN_BUDGET);
+  });
+
+  it('records the reply token usage against the daily budget', async () => {
+    setBotProvider(usageProvider('hi there', { inputTokens: 3, outputTokens: 5 }));
+    const alice = await createUser('alice');
+    const conv = await createBotConversation(alice.id, 'assistant');
+    const a = connect(alice.token);
+    await a.opened();
+
+    a.send({ type: 'send', conversationId: conv, clientMessageId: 'c1', content: 'hi' });
+    expect((await a.next()).type).toBe('ack');
+    expect((await a.next()).type).toBe('bot_start');
+
+    let frame = await a.next();
+    while (frame.type === 'bot_chunk') frame = await a.next();
+    expect(frame.type).toBe('bot_end');
+
+    const used = await query<{ tokens_used: string }>(
+      'SELECT tokens_used FROM bot_usage WHERE account_id = $1',
+      [alice.id],
+    );
+    expect(Number(used.rows[0]!.tokens_used)).toBe(8); // 3 input + 5 output
   });
 });

@@ -5,8 +5,14 @@ import {
   persistBotMessage,
 } from '../conversations/messages.js';
 import { broadcastToAccounts } from '../ws/send.js';
-import { BotError, getBotProvider, type BotTurn } from './provider.js';
+import {
+  BotError,
+  getBotProvider,
+  type BotTurn,
+  type BotUsage,
+} from './provider.js';
 import { systemPromptFor } from './registry.js';
+import { isOverBudget, recordUsage } from './budget.js';
 
 // Streams a bot reply for a send into a bot conversation (§3): bot_start ->
 // bot_chunk* -> bot_end, or bot_error. The message id is assigned up front so the
@@ -20,22 +26,44 @@ export async function streamBotReply(
   const participants = await getConversationParticipants(conversationId);
   if (!participants) return;
   const targets = participants.accountIds;
+  // Bot conversations have a single human participant; they own the token budget.
+  const human = participants.accountIds[0];
   const messageId = randomUUID();
 
   broadcastToAccounts(targets, { type: 'bot_start', conversationId, messageId });
+
+  // §cost: block once the user is over their per-day token budget. The bot_start
+  // above means the client correlates this rejection by messageId like any other
+  // bot_error. Nothing is sent to the model and no message is persisted.
+  if (human && (await isOverBudget(human))) {
+    broadcastToAccounts(targets, {
+      type: 'bot_error',
+      conversationId,
+      messageId,
+      code: 'budget_exceeded',
+    });
+    return;
+  }
+
+  let usage: BotUsage = { inputTokens: 0, outputTokens: 0 };
   try {
     const history = await getConversationTurns(conversationId, botId);
     let content = '';
-    for await (const delta of getBotProvider().streamReply({
+    const gen = getBotProvider().streamReply({
       systemPrompt: systemPromptFor(botId),
       history,
-    })) {
-      content += delta;
+    });
+    for (let r = await gen.next(); ; r = await gen.next()) {
+      if (r.done) {
+        usage = r.value;
+        break;
+      }
+      content += r.value;
       broadcastToAccounts(targets, {
         type: 'bot_chunk',
         conversationId,
         messageId,
-        delta,
+        delta: r.value,
       });
     }
     const message = await persistBotMessage(conversationId, botId, messageId, content);
@@ -48,6 +76,17 @@ export async function streamBotReply(
       messageId,
       code,
     });
+    return;
+  }
+
+  // Charge the reply's tokens after a successful delivery. Best-effort: an
+  // accounting failure must not turn a delivered reply into a bot_error.
+  if (human) {
+    try {
+      await recordUsage(human, usage.inputTokens + usage.outputTokens);
+    } catch {
+      /* accounting is best-effort */
+    }
   }
 }
 

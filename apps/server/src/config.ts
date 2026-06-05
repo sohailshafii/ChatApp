@@ -30,6 +30,8 @@ const envSchema = z.object({
   // Overridable so a cheaper model can be set without a code change.
   ANTHROPIC_MODEL: z.string().default('claude-opus-4-8'),
   OPENAI_MODEL: z.string().default('gpt-4o'),
+  // §cost: per-user/day token guardrail for bot replies (input + output).
+  BOT_DAILY_TOKEN_BUDGET: z.coerce.number().int().nonnegative().default(20000),
 });
 
 export type Config = {
@@ -44,6 +46,7 @@ export type Config = {
   openaiApiKey: string | undefined;
   anthropicModel: string;
   openaiModel: string;
+  botDailyTokenBudget: number;
   // Whether auth cookies get the Secure attribute. Derived from APP_BASE_URL's
   // scheme: off for local http dev, on for https (prod). See §6.
   cookieSecure: boolean;
@@ -75,6 +78,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     openaiApiKey: e.OPENAI_API_KEY,
     anthropicModel: e.ANTHROPIC_MODEL,
     openaiModel: e.OPENAI_MODEL,
+    botDailyTokenBudget: e.BOT_DAILY_TOKEN_BUDGET,
     cookieSecure: e.APP_BASE_URL.startsWith('https'),
   };
   return cached;

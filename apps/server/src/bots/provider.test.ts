@@ -22,6 +22,7 @@ function config(overrides: Partial<Config>): Config {
     openaiApiKey: undefined,
     anthropicModel: 'claude-opus-4-8',
     openaiModel: 'gpt-4o',
+    botDailyTokenBudget: 20000,
     cookieSecure: false,
     ...overrides,
   };
