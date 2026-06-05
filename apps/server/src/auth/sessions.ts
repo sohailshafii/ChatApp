@@ -7,8 +7,9 @@ import { generateToken, hashToken } from './tokens.js';
 // table is useless to an attacker who only reads the database.
 
 // 30-day sliding expiry: a session is valid while last_active_at is within the
-// window, and every authenticated request pushes the window forward (§7). A
-// background sweeper (future) deletes rows past the window.
+// window, and every authenticated request pushes the window forward (§7).
+// `touchSession` rejects rows past the window; `sweepExpiredSessions` (run
+// periodically by the session sweeper) deletes them.
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const SESSION_TTL_SECONDS = SESSION_TTL_MS / 1000;
 
@@ -68,4 +69,16 @@ export async function deleteSession(rawToken: string): Promise<void> {
   await query('DELETE FROM sessions WHERE token_hash = $1', [
     hashToken(rawToken),
   ]);
+}
+
+// Deletes sessions whose sliding window has elapsed (last_active_at past the
+// TTL) — the "delete" half of expiry that `touchSession` only "rejects".
+// Returns the number of rows removed. Scans the sessions_last_active_at_idx.
+export async function sweepExpiredSessions(): Promise<number> {
+  const { rowCount } = await query(
+    `DELETE FROM sessions
+      WHERE last_active_at <= now() - ($1 || ' milliseconds')::interval`,
+    [String(SESSION_TTL_MS)],
+  );
+  return rowCount ?? 0;
 }
