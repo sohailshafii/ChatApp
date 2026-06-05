@@ -240,9 +240,22 @@ the **stub** placeholder (so dev and tests run keyless, like the email sender wh
 `OPENAI_MODEL`; thinking is off and there's no prompt caching (the per-bot system
 prompt is below the cache minimum). A provider failure throws a `BotError` whose
 `code` rides the `bot_error` frame — `botErrorCodeSchema` in `@chatapp/shared`:
-`provider_unavailable` (upstream/model error) or `internal_error` (anything else);
-`budget_exceeded` is reserved for the per-user/day token budget (§cost), a
-follow-up PR that needs a usage table.
+`provider_unavailable` (upstream/model error), `budget_exceeded` (§cost token
+budget, below), or `internal_error` (anything else).
+
+**Token budget (§cost).** Each user has a per-UTC-day bot token budget
+(`BOT_DAILY_TOKEN_BUDGET`, default 20,000; input + output) tracked in the
+`bot_usage` table (migration 007, one counter row per account/day) via
+`src/bots/budget.ts`. The orchestrator **checks before** the model call — if the
+human participant is at/over the cap it emits `bot_error{code:'budget_exceeded'}`
+(after `bot_start`, so the client correlates it by messageId) and persists
+nothing — and **records after** a successful reply, adding the provider-reported
+usage (`streamReply` returns `BotUsage` after its deltas: Anthropic
+`finalMessage().usage`, OpenAI `stream_options.include_usage`, the stub a length
+estimate). Soft fixed-window like the auth rate-limiter: the reply that crosses
+the cap completes, the next is blocked; counters persist across restarts. (Bot
+*invocation-rate* limiting via the shared in-memory primitive is still a separate
+follow-up.)
 
 ### Database scripts & migrations
 
