@@ -17,6 +17,11 @@ import { peerName } from '../lib/peer';
 import { documentTitle, unreadReducer, unreadTotal } from './unread';
 import { notificationPreview, shouldFireNotification } from './notify';
 import { setFaviconBadge } from './favicon';
+import {
+  ensurePushSubscription,
+  registerServiceWorker,
+  removePushSubscription,
+} from './push';
 
 // App-level notification layer (§5, state C). Keeps a running unread total fed
 // by the WebSocket and drives the tab title + favicon dot; when the tab is
@@ -63,6 +68,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const openIdRef = useRef<string | null>(null);
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
+  const swRegRef = useRef<ServiceWorkerRegistration | null>(null);
 
   const openId = openConversationId(location.pathname);
   openIdRef.current = openId;
@@ -158,6 +164,29 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     document.title = documentTitle(total);
     setFaviconBadge(total > 0);
   }, [total]);
+
+  // Web Push (state D): once permission is granted, register the service worker
+  // and ensure this browser is subscribed server-side. Best-effort — degrades
+  // to nothing if unsupported or the push endpoints aren't wired yet.
+  useEffect(() => {
+    if (permission !== 'granted') return;
+    let cancelled = false;
+    registerServiceWorker().then((reg) => {
+      if (cancelled || !reg) return;
+      swRegRef.current = reg;
+      void ensurePushSubscription(reg);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [permission]);
+
+  // Drop this browser's push subscription on logout (§6 audit: removal).
+  useEffect(() => {
+    if (authStatus === 'unauthenticated' && swRegRef.current) {
+      void removePushSubscription(swRegRef.current);
+    }
+  }, [authStatus]);
 
   const requestPermission = useCallback(async () => {
     if (!SUPPORTED) return 'denied' as NotificationPermission;
