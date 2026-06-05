@@ -232,11 +232,68 @@ a {
   overflow-wrap: anywhere;
 }
 
-.message-time {
+.message-meta {
   display: block;
   margin-top: 0.2rem;
   font-size: 0.7rem;
   opacity: 0.7;
+}
+
+.message-status.is-failed {
+  color: #ffd2d2;
+  opacity: 1;
+}
+
+.message-row.is-peer .message-status.is-failed {
+  color: var(--color-error);
+}
+
+.message-failed {
+  color: var(--color-error);
+  font-style: italic;
+}
+
+.caret {
+  margin-left: 1px;
+  animation: blink 1s step-start infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.socket-status {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+/* Composer */
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.composer-input {
+  flex: 1;
+  min-height: 2.5rem;
+  max-height: 12rem;
+  padding: 0.5rem 0.625rem;
+  font: inherit;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  resize: vertical;
+}
+
+.composer-input[aria-invalid='true'] {
+  border-color: var(--color-error);
 }
 
 .app-main {
