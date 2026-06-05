@@ -2,32 +2,39 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ConversationSummary } from '@chatapp/shared';
 import { listConversations } from '../api/conversations';
+import { useChatSocket } from '../chat/ChatSocketProvider';
+import { applyFrameToConversations } from '../chat/conversationListUpdate';
 import { ConversationList } from '../components/ConversationList';
 
-// Authenticated home: the conversation list (REQUIREMENTS.md §2). Reached only
-// behind RequireAuth. Initial state is fetched over REST; live updates will
-// arrive over the WebSocket in a later slice (§3).
-type State =
-  | { status: 'loading' }
-  | { status: 'error' }
-  | { status: 'ready'; conversations: ConversationSummary[] };
+// Authenticated home: the conversation list (§2). Loaded over REST, then kept
+// live from the WebSocket while on screen — new messages refresh the preview,
+// bump the conversation up, and raise its unread count without a reload.
+type Status = 'loading' | 'error' | 'ready';
 
 export function HomePage() {
-  const [state, setState] = useState<State>({ status: 'loading' });
+  const { subscribe } = useChatSocket();
+  const [status, setStatus] = useState<Status>('loading');
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
 
   useEffect(() => {
     let active = true;
     listConversations()
       .then((res) => {
-        if (active) setState({ status: 'ready', conversations: res.conversations });
+        if (!active) return;
+        setConversations(res.conversations);
+        setStatus('ready');
       })
-      .catch(() => {
-        if (active) setState({ status: 'error' });
-      });
+      .catch(() => active && setStatus('error'));
     return () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    return subscribe((frame) => {
+      setConversations((prev) => applyFrameToConversations(prev, frame));
+    });
+  }, [subscribe]);
 
   return (
     <section className="page" aria-labelledby="chats-heading">
@@ -38,19 +45,17 @@ export function HomePage() {
         </Link>
       </div>
 
-      {state.status === 'loading' && (
+      {status === 'loading' && (
         <p className="loading" role="status">
           Loading your conversations…
         </p>
       )}
-      {state.status === 'error' && (
+      {status === 'error' && (
         <p className="form-error" role="alert">
           Couldn’t load your conversations. Please refresh to try again.
         </p>
       )}
-      {state.status === 'ready' && (
-        <ConversationList conversations={state.conversations} />
-      )}
+      {status === 'ready' && <ConversationList conversations={conversations} />}
     </section>
   );
 }
