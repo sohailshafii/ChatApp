@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { ConversationSummary } from '@chatapp/shared';
 import { useAuth } from '../auth/AuthContext';
 import { useChatSocket } from '../chat/ChatSocketProvider';
@@ -7,6 +7,7 @@ import { messageReducer } from '../chat/messageReducer';
 import {
   getConversation,
   getMessages,
+  hideConversation,
   markConversationRead,
 } from '../api/conversations';
 import { MessageList } from '../components/MessageList';
@@ -25,10 +26,12 @@ type Load =
 // streams bot replies.
 export function ConversationPage() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { status: socketStatus, send, subscribe } = useChatSocket();
 
   const [load, setLoad] = useState<Load>({ status: 'loading' });
+  const [hiding, setHiding] = useState(false);
   const [messages, dispatch] = useReducer(messageReducer, []);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -113,6 +116,21 @@ export function ConversationPage() {
     [id, send, user?.id],
   );
 
+  async function handleHide() {
+    if (hiding) return;
+    if (!window.confirm('Hide this conversation? It will reappear if there is new activity.')) {
+      return;
+    }
+    setHiding(true);
+    try {
+      await hideConversation(id);
+      navigate('/', { replace: true });
+    } catch {
+      setHiding(false);
+      window.alert('Couldn’t hide the conversation. Please try again.');
+    }
+  }
+
   if (load.status === 'loading') {
     return (
       <section className="page conversation">
@@ -141,6 +159,14 @@ export function ConversationPage() {
           ←
         </Link>
         <h1 id="conversation-heading">{name}</h1>
+        <button
+          type="button"
+          className="btn-link hide-conversation"
+          onClick={handleHide}
+          disabled={hiding}
+        >
+          {hiding ? 'Hiding…' : 'Hide'}
+        </button>
       </header>
 
       {socketStatus !== 'open' && (

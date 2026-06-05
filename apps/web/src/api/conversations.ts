@@ -60,3 +60,11 @@ export async function markConversationRead(id: string, messageId: string): Promi
     body: { messageId },
   });
 }
+
+/**
+ * DELETE /conversations/:id — hide the conversation from the caller's list (§2).
+ * The peer is unaffected; new activity un-hides it. History isn't deleted.
+ */
+export async function hideConversation(id: string): Promise<void> {
+  await apiFetch<void>(`/conversations/${id}`, { method: 'DELETE' });
+}

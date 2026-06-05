@@ -185,6 +185,10 @@ a {
   font-size: 1.25rem;
 }
 
+.hide-conversation {
+  margin-left: auto;
+}
+
 .back-link {
   font-size: 1.4rem;
   line-height: 1;
