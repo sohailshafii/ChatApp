@@ -4,6 +4,7 @@ import { ApiError } from '../api/client';
 import { deleteAccount, requestDataExport } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
 import { Field } from '../components/Field';
+import { NotificationsSettings } from '../notifications/NotificationsSettings';
 
 // Account settings (§6): account summary, data export, and the delete-account
 // danger zone (re-enter password, immediate hard delete).
@@ -68,6 +69,8 @@ export function SettingsPage() {
           <dd>{user.email}</dd>
         </dl>
       )}
+
+      <NotificationsSettings />
 
       <section aria-labelledby="export-heading">
         <h2 id="export-heading">Export your data</h2>

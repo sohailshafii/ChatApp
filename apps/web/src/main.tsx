@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './auth/AuthContext';
 import { ChatSocketProvider } from './chat/ChatSocketProvider';
+import { NotificationsProvider } from './notifications/NotificationsProvider';
 import './styles.css';
 
 const root = document.getElementById('root');
@@ -14,7 +15,9 @@ createRoot(root).render(
     <BrowserRouter>
       <AuthProvider>
         <ChatSocketProvider>
-          <App />
+          <NotificationsProvider>
+            <App />
+          </NotificationsProvider>
         </ChatSocketProvider>
       </AuthProvider>
     </BrowserRouter>
