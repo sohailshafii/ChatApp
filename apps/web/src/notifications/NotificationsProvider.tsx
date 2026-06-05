@@ -22,6 +22,7 @@ import {
   registerServiceWorker,
   removePushSubscription,
 } from './push';
+import { playIncomingChime } from './sound';
 
 // App-level notification layer (§5, state C). Keeps a running unread total fed
 // by the WebSocket and drives the tab title + favicon dot; when the tab is
@@ -30,14 +31,28 @@ import {
 // permission primitive exposed here.
 
 const SUPPORTED = typeof window !== 'undefined' && 'Notification' in window;
+const PROMPT_DISMISSED_KEY = 'chatapp:notif-prompt-dismissed';
 
 interface NotificationsValue {
   supported: boolean;
   permission: NotificationPermission;
   requestPermission: () => Promise<NotificationPermission>;
+  // Contextual "get notified when offline" prompt (§5): shown only after the
+  // user's first send/receive, while permission is still undecided and the
+  // prompt hasn't been dismissed.
+  promptVisible: boolean;
+  dismissPrompt: () => void;
 }
 
 const NotificationsContext = createContext<NotificationsValue | null>(null);
+
+function readPromptDismissed(): boolean {
+  try {
+    return localStorage.getItem(PROMPT_DISMISSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 function openConversationId(pathname: string): string | null {
   const m = pathname.match(/^\/conversations\/([^/]+)$/);
@@ -57,6 +72,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [visible, setVisible] = useState(() =>
     typeof document === 'undefined' ? true : !document.hidden,
   );
+  // The contextual prompt waits for the first send/receive (per spec, never on
+  // load); dismissal persists so we don't nag across sessions.
+  const [hasInteracted, setHasInteracted] = useState(false);
+  const [promptDismissed, setPromptDismissed] = useState(readPromptDismissed);
 
   // Latest values for the socket handler, which is wired once per session and
   // must not re-subscribe on every state change.
@@ -133,6 +152,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
     return subscribe((frame) => {
+      // The first send (our own message acked) or receive unlocks the
+      // contextual permission prompt.
+      if (frame.type === 'ack' || frame.type === 'message' || frame.type === 'bot_end') {
+        setHasInteracted(true);
+      }
+
       let conversationId: string;
       let content: string;
       if (frame.type === 'message') {
@@ -152,6 +177,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         return;
       }
       dispatch({ type: 'incoming', conversationId });
+      // A subtle chime for an incoming message you're not actively reading
+      // (state B/C; default-on).
+      playIncomingChime();
       if (shouldFireNotification({ hidden: document.hidden, permission: permissionRef.current })) {
         fireNotification(conversationId, content);
       }
@@ -195,9 +223,31 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return result;
   }, []);
 
+  const dismissPrompt = useCallback(() => {
+    setPromptDismissed(true);
+    try {
+      localStorage.setItem(PROMPT_DISMISSED_KEY, '1');
+    } catch {
+      // Storage unavailable — the prompt just won't stay dismissed across sessions.
+    }
+  }, []);
+
+  const promptVisible =
+    SUPPORTED &&
+    authStatus === 'authenticated' &&
+    permission === 'default' &&
+    hasInteracted &&
+    !promptDismissed;
+
   const value = useMemo<NotificationsValue>(
-    () => ({ supported: SUPPORTED, permission, requestPermission }),
-    [permission, requestPermission],
+    () => ({
+      supported: SUPPORTED,
+      permission,
+      requestPermission,
+      promptVisible,
+      dismissPrompt,
+    }),
+    [permission, requestPermission, promptVisible, dismissPrompt],
   );
 
   return (
