@@ -38,6 +38,7 @@ import {
   ipKey,
   accountKey,
 } from '../rate-limit/auth-rate-limit.js';
+import { recordAuthEvent } from '../auth/audit.js';
 import { loadConfig } from '../config.js';
 
 // Postgres unique-violation error code.
@@ -179,6 +180,11 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     // Generic error whether the username is unknown or the password is wrong, so
     // the response does not reveal which usernames exist (§1).
     if (!account || !(await verifyPassword(account.password_hash, password))) {
+      // account is set for a wrong password, undefined for an unknown username.
+      await recordAuthEvent(request.log, 'login_failure', {
+        accountId: account?.id ?? null,
+        ip: request.ip,
+      });
       return sendError(
         reply,
         'invalid_credentials',
@@ -189,6 +195,10 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     // Only reveal the unverified state to a caller who proved the password —
     // otherwise it would leak account existence (§1: unverified can't log in).
     if (!account.verified) {
+      await recordAuthEvent(request.log, 'login_failure', {
+        accountId: account.id,
+        ip: request.ip,
+      });
       return sendError(
         reply,
         'unverified',
@@ -199,6 +209,10 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     const sessionToken = await createSession(account.id);
     reply.setCookie(SESSION_COOKIE_NAME, sessionToken, sessionCookieOptions);
     reply.setCookie(CSRF_COOKIE_NAME, generateCsrfToken(), csrfCookieOptions);
+    await recordAuthEvent(request.log, 'login', {
+      accountId: account.id,
+      ip: request.ip,
+    });
 
     const body: LoginResponse = { user: toAccountUser(account) };
     return reply.code(200).send(body);
@@ -508,6 +522,11 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     } finally {
       client.release();
     }
+
+    await recordAuthEvent(request.log, 'password_reset', {
+      accountId: record.account_id,
+      ip: request.ip,
+    });
 
     return reply.code(200).send();
   });
