@@ -15,6 +15,7 @@ export default defineConfig({
       '/auth': { target: API_TARGET, changeOrigin: true },
       '/conversations': { target: API_TARGET, changeOrigin: true },
       '/bots': { target: API_TARGET, changeOrigin: true },
+      '/push': { target: API_TARGET, changeOrigin: true },
       // WebSocket messaging (§3): ws:true upgrades the connection through the proxy.
       '/ws': { target: API_TARGET, changeOrigin: true, ws: true },
     },
