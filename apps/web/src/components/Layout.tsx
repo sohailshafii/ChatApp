@@ -25,6 +25,7 @@ export function Layout() {
           {status === 'authenticated' && user && (
             <>
               <span className="app-user">{user.username}</span>
+              <Link to="/settings">Settings</Link>
               <button type="button" className="btn-link" onClick={handleLogout}>
                 Log out
               </button>

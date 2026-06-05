@@ -44,6 +44,17 @@ export async function logout(): Promise<void> {
 }
 
 /**
+ * DELETE /auth/account — re-authenticates with the current password, then hard
+ * deletes the account (§6): anonymizes human-conversation history, removes bot
+ * conversations, sessions, and push subscriptions. Resolves on success (the
+ * server destroys the session); throws `ApiError` with `invalid_credentials`
+ * (wrong password), `rate_limited`, or `validation_error`.
+ */
+export async function deleteAccount(password: string): Promise<void> {
+  await apiFetch<void>('/auth/account', { method: 'DELETE', body: { password } });
+}
+
+/**
  * POST /auth/verify-email — consumes a one-time verification token (§1).
  * Resolves on success; throws `ApiError` with `invalid_token` / `expired_token`
  * (24h expiry) or `rate_limited`.
