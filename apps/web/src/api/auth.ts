@@ -55,6 +55,16 @@ export async function deleteAccount(password: string): Promise<void> {
 }
 
 /**
+ * POST /auth/export — requests an asynchronous export of the caller's own data
+ * (§6). The archive is delivered later via a time-limited email link, so this
+ * resolves on the request being accepted (empty 200 body). Throws `ApiError`
+ * with `rate_limited` if export requests are coming too frequently.
+ */
+export async function requestDataExport(): Promise<void> {
+  await apiFetch<void>('/auth/export', { method: 'POST' });
+}
+
+/**
  * POST /auth/verify-email — consumes a one-time verification token (§1).
  * Resolves on success; throws `ApiError` with `invalid_token` / `expired_token`
  * (24h expiry) or `rate_limited`.

@@ -452,6 +452,12 @@ a.btn-primary {
   margin: 0;
 }
 
+.form-success {
+  color: var(--color-text);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
 .btn-primary {
   padding: 0.6rem 1rem;
   font-size: 1rem;

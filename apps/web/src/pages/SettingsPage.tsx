@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { deleteAccount } from '../api/auth';
+import { deleteAccount, requestDataExport } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
 import { Field } from '../components/Field';
 
-// Account settings (§6). For now: account summary + the delete-account danger
-// zone (re-enter password, immediate hard delete). Data export will follow.
+// Account settings (§6): account summary, data export, and the delete-account
+// danger zone (re-enter password, immediate hard delete).
 export function SettingsPage() {
   const { user, clearSession } = useAuth();
   const navigate = useNavigate();
@@ -15,6 +15,24 @@ export function SettingsPage() {
   const [acknowledged, setAcknowledged] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Data export is fire-and-forget: a request, then "check your email".
+  type ExportState = 'idle' | 'requesting' | 'requested' | 'error';
+  const [exportState, setExportState] = useState<ExportState>('idle');
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function handleExport() {
+    if (exportState === 'requesting') return;
+    setExportState('requesting');
+    setExportError(null);
+    try {
+      await requestDataExport();
+      setExportState('requested');
+    } catch (err) {
+      setExportError(exportErrorMessage(err));
+      setExportState('error');
+    }
+  }
 
   async function handleDelete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,6 +68,39 @@ export function SettingsPage() {
           <dd>{user.email}</dd>
         </dl>
       )}
+
+      <section aria-labelledby="export-heading">
+        <h2 id="export-heading">Export your data</h2>
+        <p>
+          Request a copy of your data — your profile, conversation details, and
+          the full message content from your conversations. We’ll prepare it and
+          email you a download link, which expires after a short time.
+        </p>
+
+        {exportState === 'requested' ? (
+          <p className="form-success" role="status">
+            Your export is being prepared. We’ll email a download link to{' '}
+            {user ? <strong>{user.email}</strong> : 'your address'} when it’s
+            ready.
+          </p>
+        ) : (
+          <>
+            {exportState === 'error' && exportError && (
+              <p className="form-error" role="alert">
+                {exportError}
+              </p>
+            )}
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleExport}
+              disabled={exportState === 'requesting'}
+            >
+              {exportState === 'requesting' ? 'Requesting…' : 'Request data export'}
+            </button>
+          </>
+        )}
+      </section>
 
       <section className="danger-zone" aria-labelledby="delete-heading">
         <h2 id="delete-heading">Delete account</h2>
@@ -112,4 +163,16 @@ function deleteErrorMessage(err: unknown): string {
     }
   }
   return 'Something went wrong. Please try again.';
+}
+
+function exportErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    switch (err.code) {
+      case 'rate_limited':
+        return 'You’ve recently requested an export. Check your email, or try again later.';
+      case 'network_error':
+        return 'Couldn’t reach the server. Check your connection and try again.';
+    }
+  }
+  return 'Couldn’t start your export. Please try again.';
 }

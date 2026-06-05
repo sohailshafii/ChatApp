@@ -87,3 +87,12 @@ export const deleteAccountRequestSchema = z.object({
   password: passwordSchema,
 });
 export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
+
+// --- Data export (§6) ---
+// POST /auth/export — no body; the session identifies the user. Kicks off an
+// asynchronous export of the caller's own data (profile, conversation metadata,
+// full message content from their conversations) and emails a time-limited
+// download link when ready. Responds 200 with an empty body immediately
+// (fire-and-forget), regardless of whether a request is already in flight, to
+// avoid leaking state. Repeated requests should be rate-limited server-side
+// (surfaced as `rate_limited`).
