@@ -158,6 +158,87 @@ a {
   border-radius: 999px;
 }
 
+/* Visually hidden but available to screen readers. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Conversation detail (§3) */
+.conversation-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.conversation-header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.back-link {
+  font-size: 1.4rem;
+  line-height: 1;
+  text-decoration: none;
+  color: var(--color-accent);
+}
+
+.load-older {
+  display: block;
+  margin: 0 auto 1rem;
+}
+
+.message-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.message-row {
+  display: flex;
+}
+
+.message-row.is-own {
+  justify-content: flex-end;
+}
+
+.message-bubble {
+  max-width: 75%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.9rem;
+  background: #ececec;
+}
+
+.message-row.is-own .message-bubble {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.message-content {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message-time {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
 .app-main {
   padding: 1.5rem 1.25rem;
 }

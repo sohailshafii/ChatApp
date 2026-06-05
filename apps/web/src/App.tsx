@@ -4,6 +4,7 @@ import { RequireAuth, RedirectIfAuthed } from './auth/guards';
 import { HomePage } from './pages/HomePage';
 import { SignupPage } from './pages/SignupPage';
 import { LoginPage } from './pages/LoginPage';
+import { ConversationPage } from './pages/ConversationPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { ResendVerificationPage } from './pages/ResendVerificationPage';
 import { PasswordResetRequestPage } from './pages/PasswordResetRequestPage';
@@ -17,11 +18,7 @@ export function App() {
         {/* Requires a session. */}
         <Route element={<RequireAuth />}>
           <Route index element={<HomePage />} />
-          {/* Conversation detail view is a later slice. */}
-          <Route
-            path="conversations/:id"
-            element={<Placeholder title="Conversation" />}
-          />
+          <Route path="conversations/:id" element={<ConversationPage />} />
         </Route>
 
         {/* Guest-only: authenticated users are bounced home. */}

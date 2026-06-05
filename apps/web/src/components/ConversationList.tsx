@@ -1,10 +1,7 @@
 import { Link } from 'react-router-dom';
-import type { ConversationPeer, ConversationSummary } from '@chatapp/shared';
+import type { ConversationSummary } from '@chatapp/shared';
 import { formatConversationTimestamp } from '../lib/time';
-
-function peerName(peer: ConversationPeer): string {
-  return peer.kind === 'human' ? peer.username : peer.name;
-}
+import { peerName } from '../lib/peer';
 
 export function ConversationList({
   conversations,
