@@ -8,6 +8,7 @@ import { query, closePool } from '../db/pool.js';
 import { hashPassword } from '../auth/passwords.js';
 import { createSession } from '../auth/sessions.js';
 import { loadConfig } from '../config.js';
+import { BotError, setBotProvider, type BotProvider } from '../bots/provider.js';
 
 const ORIGIN = loadConfig().appBaseUrl;
 
@@ -36,8 +37,19 @@ afterEach(async () => {
     }
   }
   sockets.length = 0;
+  setBotProvider(undefined); // clear any per-test provider override
   await query('TRUNCATE accounts, conversations RESTART IDENTITY CASCADE');
 });
+
+// A provider whose stream throws before yielding — exercises the bot_error path.
+function throwingProvider(err: unknown): BotProvider {
+  return {
+    // eslint-disable-next-line require-yield
+    async *streamReply() {
+      throw err;
+    },
+  };
+}
 
 async function createUser(
   username: string,
@@ -323,5 +335,47 @@ describe('WebSocket bot replies (§3)', () => {
       [conv],
     );
     expect(rows[0]!.n).toBe(1);
+  });
+
+  it('emits bot_error with the BotError code on a provider failure', async () => {
+    setBotProvider(
+      throwingProvider(new BotError('provider_unavailable', 'upstream down')),
+    );
+    const alice = await createUser('alice');
+    const conv = await createBotConversation(alice.id, 'assistant');
+    const a = connect(alice.token);
+    await a.opened();
+
+    a.send({ type: 'send', conversationId: conv, clientMessageId: 'c1', content: 'hi' });
+    expect((await a.next()).type).toBe('ack');
+    expect((await a.next()).type).toBe('bot_start');
+
+    const err = await a.next();
+    expect(err.type).toBe('bot_error');
+    expect(err.conversationId).toBe(conv);
+    expect(err.code).toBe('provider_unavailable');
+
+    // No assistant message is persisted on failure.
+    const { rows } = await query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM messages WHERE conversation_id = $1 AND sender_id = 'assistant'",
+      [conv],
+    );
+    expect(rows[0]!.n).toBe(0);
+  });
+
+  it('maps a non-BotError failure to code internal_error', async () => {
+    setBotProvider(throwingProvider(new Error('boom')));
+    const alice = await createUser('alice');
+    const conv = await createBotConversation(alice.id, 'assistant');
+    const a = connect(alice.token);
+    await a.opened();
+
+    a.send({ type: 'send', conversationId: conv, clientMessageId: 'c1', content: 'hi' });
+    expect((await a.next()).type).toBe('ack');
+    expect((await a.next()).type).toBe('bot_start');
+
+    const err = await a.next();
+    expect(err.type).toBe('bot_error');
+    expect(err.code).toBe('internal_error');
   });
 });

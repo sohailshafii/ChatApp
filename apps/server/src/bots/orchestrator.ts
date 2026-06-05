@@ -5,7 +5,7 @@ import {
   persistBotMessage,
 } from '../conversations/messages.js';
 import { broadcastToAccounts } from '../ws/send.js';
-import { getBotProvider, type BotTurn } from './provider.js';
+import { BotError, getBotProvider, type BotTurn } from './provider.js';
 import { systemPromptFor } from './registry.js';
 
 // Streams a bot reply for a send into a bot conversation (§3): bot_start ->
@@ -40,8 +40,14 @@ export async function streamBotReply(
     }
     const message = await persistBotMessage(conversationId, botId, messageId, content);
     broadcastToAccounts(targets, { type: 'bot_end', message });
-  } catch {
-    broadcastToAccounts(targets, { type: 'bot_error', conversationId, messageId });
+  } catch (err) {
+    const code = err instanceof BotError ? err.code : 'internal_error';
+    broadcastToAccounts(targets, {
+      type: 'bot_error',
+      conversationId,
+      messageId,
+      code,
+    });
   }
 }
 
