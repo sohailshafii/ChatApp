@@ -413,9 +413,14 @@ a.btn-primary {
   font-weight: 600;
 }
 
-.field-hint {
+.field-hint,
+.form-hint {
   font-size: 0.85rem;
   color: var(--color-muted);
+}
+
+.form-hint {
+  margin: 0;
 }
 
 .field input {
