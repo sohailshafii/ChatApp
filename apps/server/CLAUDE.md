@@ -161,6 +161,21 @@ curl -i -X POST http://localhost:8080/auth/password-reset/confirm \
   -d "{\"token\":\"$TOKEN\",\"newPassword\":\"a brand new passphrase\"}"
 ```
 
+#### Audit logging (§6)
+
+A per-account log of auth events lives in `auth_audit_log` (migration 008),
+written via `recordAuthEvent(log, event, {accountId, ip})` in `src/auth/audit.ts`
+— best-effort (a failed insert is logged, never thrown) and awaited so the row is
+ordered before the response. Wired now: `login`, `login_failure` (wrong password
+*and* unverified; `account_id` is null for an unknown username), `password_reset`.
+The `AuthEvent` union also reserves `account_deletion` and
+`push_subscription_added`/`_removed` for when those endpoints land — no migration
+needed to start emitting them. `account_id` is **`ON DELETE SET NULL`** so the log
+outlives the account (deletion is itself an audited event; §6 keeps audit logs
+~180 days). The user-facing "recent activity" view and retention pruning are
+deferred follow-ups. Inspect with
+`SELECT account_id, event, ip, created_at FROM auth_audit_log ORDER BY created_at;`.
+
 #### Rate limiting
 
 Auth endpoints are rate limited (§6) by a single in-memory primitive in

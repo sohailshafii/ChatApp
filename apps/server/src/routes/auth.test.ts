@@ -517,6 +517,60 @@ describe('POST /auth/password-reset/confirm', () => {
   });
 });
 
+describe('auth audit log (§6)', () => {
+  async function auditRows() {
+    const { rows } = await query<{ event: string; account_id: string | null }>(
+      'SELECT event, account_id FROM auth_audit_log ORDER BY created_at',
+    );
+    return rows;
+  }
+
+  it('records a successful login', async () => {
+    await createVerifiedUser();
+    const id = await accountIdByUsername();
+    await login();
+    expect(await auditRows()).toEqual([{ event: 'login', account_id: id }]);
+  });
+
+  it('records a wrong-password attempt as login_failure for the account', async () => {
+    await createVerifiedUser();
+    const id = await accountIdByUsername();
+    await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { username: 'alice', password: 'wrong password' },
+    });
+    expect(await auditRows()).toEqual([
+      { event: 'login_failure', account_id: id },
+    ]);
+  });
+
+  it('records an unknown-username attempt as login_failure with no account', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { username: 'ghost', password: 'whatever password' },
+    });
+    expect(await auditRows()).toEqual([
+      { event: 'login_failure', account_id: null },
+    ]);
+  });
+
+  it('records a completed password reset', async () => {
+    await createVerifiedUser();
+    const id = await accountIdByUsername();
+    const raw = await insertPasswordResetToken(id);
+    await app.inject({
+      method: 'POST',
+      url: '/auth/password-reset/confirm',
+      payload: { token: raw, newPassword: 'a brand new passphrase' },
+    });
+    expect(await auditRows()).toEqual([
+      { event: 'password_reset', account_id: id },
+    ]);
+  });
+});
+
 describe('auth rate limiting (§6)', () => {
   const resend = (headers?: Record<string, string>) =>
     app.inject({
