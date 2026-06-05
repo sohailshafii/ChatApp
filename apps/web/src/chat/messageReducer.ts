@@ -1,4 +1,4 @@
-import type { Message, ServerWsMessage } from '@chatapp/shared';
+import type { BotErrorCode, Message, ServerWsMessage } from '@chatapp/shared';
 
 // Reconciles the conversation's on-screen messages from REST history + live
 // WebSocket frames (§3). Pure and framework-free so it can be unit-tested.
@@ -23,6 +23,9 @@ export interface DisplayMessage {
   createdAt: string;
   clientMessageId: string | null;
   status: MessageStatus;
+  // Why a bot reply failed, set from bot_error so the UI can branch the copy
+  // (e.g. budget vs. transient). Only meaningful when status === 'failed'.
+  errorCode?: BotErrorCode;
 }
 
 export interface PendingDraft {
@@ -146,7 +149,9 @@ function applyFrame(
     case 'bot_error':
       if (frame.conversationId !== conversationId) return state;
       return state.map((m) =>
-        m.id === frame.messageId ? { ...m, status: 'failed' } : m,
+        m.id === frame.messageId
+          ? { ...m, status: 'failed', errorCode: frame.code }
+          : m,
       );
 
     case 'error':

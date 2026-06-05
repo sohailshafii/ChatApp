@@ -93,7 +93,7 @@ describe('messageReducer', () => {
     expect(state[0]).toMatchObject({ id: 'bot-1', senderId: 'assistant', status: 'sent' });
   });
 
-  it('marks a bot stream failed on bot_error', () => {
+  it('marks a bot stream failed on bot_error and carries the error code', () => {
     let state = frame([], { type: 'bot_start', conversationId: CONV, messageId: 'bot-1' });
     state = frame(state, {
       type: 'bot_error',
@@ -101,7 +101,23 @@ describe('messageReducer', () => {
       messageId: 'bot-1',
       code: 'provider_unavailable',
     });
-    expect(state[0]?.status).toBe('failed');
+    expect(state[0]).toMatchObject({ status: 'failed', errorCode: 'provider_unavailable' });
+  });
+
+  it('preserves partial streamed content alongside the failure', () => {
+    let state = frame([], { type: 'bot_start', conversationId: CONV, messageId: 'bot-1' });
+    state = frame(state, { type: 'bot_chunk', conversationId: CONV, messageId: 'bot-1', delta: 'Half' });
+    state = frame(state, {
+      type: 'bot_error',
+      conversationId: CONV,
+      messageId: 'bot-1',
+      code: 'budget_exceeded',
+    });
+    expect(state[0]).toMatchObject({
+      content: 'Half',
+      status: 'failed',
+      errorCode: 'budget_exceeded',
+    });
   });
 
   it('ignores frames for a different conversation', () => {
