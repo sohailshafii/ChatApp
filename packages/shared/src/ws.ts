@@ -61,10 +61,24 @@ export const wsBotEndSchema = z.object({
   type: z.literal('bot_end'),
   message: messageSchema,
 });
+
+// Machine-readable reason a bot reply failed, so the client can branch without
+// string-matching the message. `provider_unavailable`: the upstream model/API
+// errored (network, timeout, 5xx, overload, bad key). `budget_exceeded`: the
+// per-user/day token budget (§cost) is spent — reserved now, enforced in a
+// later PR. `internal_error`: anything else.
+export const botErrorCodeSchema = z.enum([
+  'provider_unavailable',
+  'budget_exceeded',
+  'internal_error',
+]);
+export type BotErrorCode = z.infer<typeof botErrorCodeSchema>;
+
 export const wsBotErrorSchema = z.object({
   type: z.literal('bot_error'),
   conversationId: z.string().uuid(),
   messageId: z.string().uuid(),
+  code: botErrorCodeSchema,
 });
 
 // A protocol/validation error, correlated to a send via clientMessageId when

@@ -230,10 +230,19 @@ without duplicating or re-broadcasting. Live sockets are tracked per account in
 `src/ws/hub.ts` (in-process; move behind a pub/sub before running multiple
 machines). A send into a **bot** conversation streams a reply: after the user
 message is persisted + acked, the orchestrator (`src/bots/orchestrator.ts`) emits
-`bot_start` → `bot_chunk*` → `bot_end` (or `bot_error`) and persists the reply as
-a message from the bot. Replies come from a pluggable provider
-(`src/bots/provider.ts`); a **stub** streams a placeholder until the real
-OpenAI/Anthropic clients + per-user/day token budget (§cost) land (next PR).
+`bot_start` → `bot_chunk*` → `bot_end` (or `bot_error{code}`) and persists the
+reply as a message from the bot. Replies come from a pluggable provider
+(`src/bots/provider.ts`): **Anthropic** (`@anthropic-ai/sdk`, default model
+`claude-opus-4-8`) or **OpenAI** (`openai`, default `gpt-4o`), chosen by
+`BOT_PROVIDER` **and** the matching API key; with neither key set it falls back to
+the **stub** placeholder (so dev and tests run keyless, like the email sender when
+`RESEND_API_KEY` is unset). Models are overridable via `ANTHROPIC_MODEL` /
+`OPENAI_MODEL`; thinking is off and there's no prompt caching (the per-bot system
+prompt is below the cache minimum). A provider failure throws a `BotError` whose
+`code` rides the `bot_error` frame — `botErrorCodeSchema` in `@chatapp/shared`:
+`provider_unavailable` (upstream/model error) or `internal_error` (anything else);
+`budget_exceeded` is reserved for the per-user/day token budget (§cost), a
+follow-up PR that needs a usage table.
 
 ### Database scripts & migrations
 

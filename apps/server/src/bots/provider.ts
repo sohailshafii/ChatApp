@@ -1,7 +1,12 @@
+import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import type { BotErrorCode } from '@chatapp/shared';
+import { loadConfig, type Config } from '../config.js';
+
 // Bot reply provider seam (§3). The orchestrator streams replies through this
-// interface; real OpenAI/Anthropic clients land behind it in a follow-up. Until
-// then — and whenever no provider API key is configured — the stub is used,
-// mirroring the email sender's "log instead of send" posture.
+// interface. The active provider is chosen by BOT_PROVIDER + the presence of the
+// matching API key; with no key configured the stub is used, mirroring the email
+// sender's "log instead of send" posture so dev and the test suite run keyless.
 
 export type BotTurn = { role: 'user' | 'assistant'; content: string };
 
@@ -15,10 +20,99 @@ export interface BotProvider {
   streamReply(input: BotReplyInput): AsyncIterable<string>;
 }
 
+// Thrown by a provider when an upstream call fails, carrying the wire code the
+// orchestrator surfaces on the bot_error frame. Anything that isn't a BotError
+// is treated as `internal_error`.
+export class BotError extends Error {
+  constructor(
+    readonly code: BotErrorCode,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = 'BotError';
+  }
+}
+
+// Chat replies render text only, so thinking is left off (it would add latency
+// and token cost with no visible benefit). This bounds a runaway generation; the
+// reply can't exceed the §3 message cap anyway.
+const MAX_OUTPUT_TOKENS = 4096;
+
+export class AnthropicBotProvider implements BotProvider {
+  private readonly client: Anthropic;
+  constructor(
+    apiKey: string,
+    private readonly model: string,
+  ) {
+    this.client = new Anthropic({ apiKey });
+  }
+
+  async *streamReply(input: BotReplyInput): AsyncIterable<string> {
+    try {
+      const stream = this.client.messages.stream({
+        model: this.model,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        system: input.systemPrompt,
+        messages: input.history.map((t) => ({ role: t.role, content: t.content })),
+      });
+      for await (const event of stream) {
+        if (
+          event.type === 'content_block_delta' &&
+          event.delta.type === 'text_delta'
+        ) {
+          yield event.delta.text;
+        }
+      }
+    } catch (err) {
+      if (err instanceof Anthropic.APIError) {
+        throw new BotError('provider_unavailable', `Anthropic: ${err.message}`, {
+          cause: err,
+        });
+      }
+      throw err;
+    }
+  }
+}
+
+export class OpenAiBotProvider implements BotProvider {
+  private readonly client: OpenAI;
+  constructor(
+    apiKey: string,
+    private readonly model: string,
+  ) {
+    this.client = new OpenAI({ apiKey });
+  }
+
+  async *streamReply(input: BotReplyInput): AsyncIterable<string> {
+    try {
+      const stream = await this.client.chat.completions.create({
+        model: this.model,
+        stream: true,
+        messages: [
+          { role: 'system', content: input.systemPrompt },
+          ...input.history.map((t) => ({ role: t.role, content: t.content })),
+        ],
+      });
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) yield delta;
+      }
+    } catch (err) {
+      if (err instanceof OpenAI.APIError) {
+        throw new BotError('provider_unavailable', `OpenAI: ${err.message}`, {
+          cause: err,
+        });
+      }
+      throw err;
+    }
+  }
+}
+
 // Placeholder provider: streams a fixed reply in word-sized chunks so the full
 // streaming path (bot_start -> chunks -> bot_end) is exercised in dev and tests
 // without a model or API key.
-class StubBotProvider implements BotProvider {
+export class StubBotProvider implements BotProvider {
   async *streamReply(): AsyncIterable<string> {
     const text =
       'Thanks for the message! Language-model replies are not wired up yet, ' +
@@ -31,8 +125,34 @@ class StubBotProvider implements BotProvider {
 
 const stub = new StubBotProvider();
 
-// The active provider. Real providers (selected by BOT_PROVIDER + the presence of
-// an API key) are added in a follow-up; for now everything uses the stub.
+let cached: BotProvider | undefined;
+let override: BotProvider | undefined;
+
+// Test seam: inject a provider (e.g. one that throws a specific BotError), or
+// pass undefined to clear the override and re-select from config on next call.
+export function setBotProvider(provider: BotProvider | undefined): void {
+  override = provider;
+  cached = undefined;
+}
+
+// The active provider, chosen by BOT_PROVIDER + the matching key. The named
+// provider must hold its own key; otherwise (and when neither key is set) the
+// stub is used.
 export function getBotProvider(): BotProvider {
+  if (override) return override;
+  if (cached) return cached;
+  cached = selectProvider(loadConfig());
+  return cached;
+}
+
+// Pure selection by BOT_PROVIDER + matching key. Exported for unit testing the
+// key-gating without going through the cached singleton.
+export function selectProvider(config: Config): BotProvider {
+  if (config.botProvider === 'anthropic' && config.anthropicApiKey) {
+    return new AnthropicBotProvider(config.anthropicApiKey, config.anthropicModel);
+  }
+  if (config.botProvider === 'openai' && config.openaiApiKey) {
+    return new OpenAiBotProvider(config.openaiApiKey, config.openaiModel);
+  }
   return stub;
 }

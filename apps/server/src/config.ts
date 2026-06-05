@@ -20,6 +20,16 @@ const envSchema = z.object({
 
   // Optional in dev: when unset, verification emails are logged instead of sent.
   RESEND_API_KEY: z.string().optional(),
+
+  // Bot reply provider (§3). The active provider is the one named here *and*
+  // holding an API key; with neither key set the orchestrator falls back to the
+  // stub reply (like the email sender's "log instead of send" posture).
+  BOT_PROVIDER: z.enum(['anthropic', 'openai']).default('anthropic'),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  // Overridable so a cheaper model can be set without a code change.
+  ANTHROPIC_MODEL: z.string().default('claude-opus-4-8'),
+  OPENAI_MODEL: z.string().default('gpt-4o'),
 });
 
 export type Config = {
@@ -29,6 +39,11 @@ export type Config = {
   databaseUrl: string;
   appBaseUrl: string;
   resendApiKey: string | undefined;
+  botProvider: z.infer<typeof envSchema>['BOT_PROVIDER'];
+  anthropicApiKey: string | undefined;
+  openaiApiKey: string | undefined;
+  anthropicModel: string;
+  openaiModel: string;
   // Whether auth cookies get the Secure attribute. Derived from APP_BASE_URL's
   // scheme: off for local http dev, on for https (prod). See §6.
   cookieSecure: boolean;
@@ -55,6 +70,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: e.DATABASE_URL,
     appBaseUrl: e.APP_BASE_URL,
     resendApiKey: e.RESEND_API_KEY,
+    botProvider: e.BOT_PROVIDER,
+    anthropicApiKey: e.ANTHROPIC_API_KEY,
+    openaiApiKey: e.OPENAI_API_KEY,
+    anthropicModel: e.ANTHROPIC_MODEL,
+    openaiModel: e.OPENAI_MODEL,
     cookieSecure: e.APP_BASE_URL.startsWith('https'),
   };
   return cached;

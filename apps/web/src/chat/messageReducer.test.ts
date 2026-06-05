@@ -95,7 +95,12 @@ describe('messageReducer', () => {
 
   it('marks a bot stream failed on bot_error', () => {
     let state = frame([], { type: 'bot_start', conversationId: CONV, messageId: 'bot-1' });
-    state = frame(state, { type: 'bot_error', conversationId: CONV, messageId: 'bot-1' });
+    state = frame(state, {
+      type: 'bot_error',
+      conversationId: CONV,
+      messageId: 'bot-1',
+      code: 'provider_unavailable',
+    });
     expect(state[0]?.status).toBe('failed');
   });
 
