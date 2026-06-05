@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { ConversationSummary } from '@chatapp/shared';
 import { listConversations } from '../api/conversations';
 import { ConversationList } from '../components/ConversationList';
@@ -30,7 +31,12 @@ export function HomePage() {
 
   return (
     <section className="page" aria-labelledby="chats-heading">
-      <h1 id="chats-heading">Chats</h1>
+      <div className="page-head">
+        <h1 id="chats-heading">Chats</h1>
+        <Link to="/conversations/new" className="btn-primary">
+          New
+        </Link>
+      </div>
 
       {state.status === 'loading' && (
         <p className="loading" role="status">
