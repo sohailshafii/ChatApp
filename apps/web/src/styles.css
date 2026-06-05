@@ -232,6 +232,12 @@ a {
   overflow-wrap: anywhere;
 }
 
+/* Links inside own (accent) bubbles need a light colour to stay readable. */
+.message-row.is-own .message-content a {
+  color: #fff;
+  text-decoration: underline;
+}
+
 .message-meta {
   display: block;
   margin-top: 0.2rem;
