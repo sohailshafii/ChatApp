@@ -1,5 +1,6 @@
 import { formatConversationTimestamp } from '../lib/time';
 import type { DisplayMessage } from '../chat/messageReducer';
+import { MessageText } from './MessageText';
 
 // Renders a conversation's messages oldest-first. Own messages align right,
 // peer/bot messages left. Content is plain text with line breaks preserved.
@@ -27,7 +28,7 @@ export function MessageList({
                 </p>
               ) : (
                 <p className="message-content">
-                  {m.content}
+                  <MessageText text={m.content} />
                   {m.status === 'streaming' && <span className="caret" aria-hidden="true">▋</span>}
                 </p>
               )}
