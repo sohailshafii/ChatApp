@@ -1,5 +1,6 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { NotificationPrompt } from '../notifications/NotificationPrompt';
 
 // App shell: a header band plus the routed page content. The header carries
 // the account controls (username + log out, or a log in link) once auth resolves.
@@ -34,6 +35,7 @@ export function Layout() {
           {status === 'unauthenticated' && <Link to="/login">Log in</Link>}
         </nav>
       </header>
+      <NotificationPrompt />
       <main id="main" className="app-main">
         <Outlet />
       </main>
