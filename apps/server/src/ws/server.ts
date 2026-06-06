@@ -19,6 +19,11 @@ import {
 } from '../conversations/messages.js';
 import { streamBotReply } from '../bots/orchestrator.js';
 import { dispatchMessagePush } from '../push/dispatcher.js';
+import {
+  messageLimiter,
+  messageSendKey,
+  MESSAGE_LIMITS,
+} from '../rate-limit/message-rate-limit.js';
 
 // §3 WebSocket messaging server. Attached to Fastify's HTTP server via a manual
 // `upgrade` handler so we control auth and fan-out explicitly (no Socket.IO).
@@ -123,6 +128,16 @@ async function handleSend(
   const participants = await getConversationParticipants(conversationId);
   if (!participants || !participants.accountIds.includes(accountId)) {
     sendFrame(ws, errorFrame('not_found', 'Conversation not found', clientMessageId));
+    return;
+  }
+
+  // §3/§6: per-user message-send burst guard. Checked before persisting, so a
+  // rate-limited send stores and broadcasts nothing; the socket stays open.
+  if (!messageLimiter.check(messageSendKey(accountId), MESSAGE_LIMITS.send)) {
+    sendFrame(
+      ws,
+      errorFrame('rate_limited', 'Too many messages — slow down', clientMessageId),
+    );
     return;
   }
 
