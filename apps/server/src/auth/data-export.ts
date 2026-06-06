@@ -124,6 +124,16 @@ export async function createExport(
   return { rawToken: token.raw, filename };
 }
 
+// Deletes exports whose download window has elapsed (§6 retention). The archive
+// is dead weight (the link no longer works) and holds the user's PII, so it's
+// pruned promptly past expiry. Returns the number of rows removed.
+export async function sweepExpiredDataExports(): Promise<number> {
+  const { rowCount } = await query(
+    'DELETE FROM data_exports WHERE expires_at <= now()',
+  );
+  return rowCount ?? 0;
+}
+
 // Fire-and-forget worker: persist the archive and email the download link.
 // Best-effort — logs and swallows errors (the request already returned 200).
 export async function generateExport(
