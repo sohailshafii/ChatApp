@@ -192,6 +192,22 @@ as the row goes), closes the account's live sockets, clears cookies, returns `20
 empty. Push-subscription cleanup rides a future `accounts ON DELETE CASCADE` FK
 (no `push_subscriptions` table yet — upcoming §5 work).
 
+#### Data export (§6)
+
+`POST /auth/export` (no body; session + double-submit CSRF; rate-limited via
+`AUTH_LIMITS.exportPer*` → `rate_limited`). Responds **200 empty immediately and
+identically** whether or not an export is already in flight (no state leak), then
+**fire-and-forget** `generateExport` (`src/auth/data-export.ts`) builds the
+archive — profile + conversation metadata + full message content — as JSON, stores
+it in `data_exports` (migration 009, `bytea` content keyed by a hashed token, 24h
+expiry, `account_id ON DELETE CASCADE`), and emails a time-limited link
+(`mail/data-export.ts`; logged in dev while `RESEND_API_KEY` is unset). The link
+points at the **token-only** `GET /auth/export/download?token=…` (no session — the
+token is the bearer capability, like verify/reset links), which streams the
+archive as a file attachment (`invalid_token`/`expired_token` otherwise). Async is
+in-process (a real worker/queue is the future home); a retention sweep for expired
+rows is a follow-up. Records the `data_export_requested` audit event.
+
 #### Rate limiting
 
 Auth endpoints are rate limited (§6) by a single in-memory primitive in

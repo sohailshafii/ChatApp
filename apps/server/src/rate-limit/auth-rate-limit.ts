@@ -20,6 +20,9 @@ export const AUTH_LIMITS = {
   resendPerAccount: perWindow(5),
   resetPerIp: perWindow(5),
   resetPerAccount: perWindow(5),
+  // Data export (§6) is expensive to generate; cap it tightly per requester.
+  exportPerAccount: perWindow(3),
+  exportPerIp: perWindow(5),
 } as const;
 
 // Account-keyed limits normalize the identifier (lowercase) to match the citext,

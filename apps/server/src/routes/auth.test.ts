@@ -9,6 +9,7 @@ import { buildApp } from '../app.js';
 import { query, closePool } from '../db/pool.js';
 import { generateToken } from '../auth/tokens.js';
 import { authLimiter, AUTH_LIMITS } from '../rate-limit/auth-rate-limit.js';
+import { createExport } from '../auth/data-export.js';
 
 // Exercises the §1 auth flow end-to-end against the dedicated test database
 // (provisioned in global-setup) — the curl flow from apps/server/CLAUDE.md,
@@ -707,6 +708,124 @@ describe('auth audit log (§6)', () => {
     expect(await auditRows()).toEqual([
       { event: 'password_reset', account_id: id },
     ]);
+  });
+});
+
+describe('data export (§6)', () => {
+  const exportReq = (cookie: string, csrf?: string) =>
+    app.inject({
+      method: 'POST',
+      url: '/auth/export',
+      headers: csrf ? { cookie, [CSRF_HEADER_NAME]: csrf } : { cookie },
+    });
+
+  it('requires the CSRF token', async () => {
+    await createVerifiedUser();
+    const { cookie } = await login();
+    const res = await exportReq(cookie);
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe('csrf_failure');
+  });
+
+  it('accepts the request (200 empty) and audits it', async () => {
+    await createVerifiedUser();
+    const { cookie, csrf } = await login();
+    const res = await exportReq(cookie, csrf);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('');
+    const audit = await query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM auth_audit_log WHERE event = 'data_export_requested'",
+    );
+    expect(audit.rows[0]!.n).toBe(1);
+  });
+
+  it('rate-limits repeated requests per account', async () => {
+    await createVerifiedUser();
+    const { cookie, csrf } = await login();
+    for (let i = 0; i < AUTH_LIMITS.exportPerAccount.max; i++) {
+      expect((await exportReq(cookie, csrf)).statusCode).toBe(200);
+    }
+    const blocked = await exportReq(cookie, csrf);
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json().error.code).toBe('rate_limited');
+  });
+
+  it('generates a downloadable archive with profile + conversations + messages', async () => {
+    await createVerifiedUser('alice');
+    await createVerifiedUser('bob');
+    const aliceId = await accountIdByUsername('alice');
+    const bobId = await accountIdByUsername('bob');
+    // a human conversation with two messages, and a bot conversation
+    const { rows: hc } = await query<{ id: string }>(
+      'INSERT INTO conversations DEFAULT VALUES RETURNING id',
+    );
+    const humanConv = hc[0]!.id;
+    await query(
+      `INSERT INTO conversation_participants (conversation_id, account_id)
+       VALUES ($1,$2),($1,$3)`,
+      [humanConv, aliceId, bobId],
+    );
+    await query(
+      `INSERT INTO messages (conversation_id, sender_id, content)
+       VALUES ($1,$2,'hello from alice'),($1,$3,'hi from bob')`,
+      [humanConv, aliceId, bobId],
+    );
+    const { rows: bc } = await query<{ id: string }>(
+      "INSERT INTO conversations (bot_id) VALUES ('assistant') RETURNING id",
+    );
+    await query(
+      'INSERT INTO conversation_participants (conversation_id, account_id) VALUES ($1,$2)',
+      [bc[0]!.id, aliceId],
+    );
+    await query(
+      "INSERT INTO messages (conversation_id, sender_id, content) VALUES ($1,$2,'ask the bot')",
+      [bc[0]!.id, aliceId],
+    );
+
+    // Build the export directly (the route fires this in the background).
+    const { rawToken, filename } = await createExport(aliceId);
+    expect(filename).toMatch(/^chatapp-export-\d{4}-\d{2}-\d{2}\.json$/);
+
+    const dl = await app.inject({
+      method: 'GET',
+      url: `/auth/export/download?token=${encodeURIComponent(rawToken)}`,
+    });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.headers['content-disposition']).toContain(`filename="${filename}"`);
+    const archive = JSON.parse(dl.body);
+    expect(archive.profile.username).toBe('alice');
+    expect(archive.conversations).toHaveLength(2);
+    const contents = archive.conversations.flatMap((c: { messages: { content: string }[] }) =>
+      c.messages.map((m) => m.content),
+    );
+    expect(contents).toContain('hello from alice');
+    expect(contents).toContain('hi from bob');
+    expect(contents).toContain('ask the bot');
+  });
+
+  it('rejects an unknown download token', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/auth/export/download?token=${generateToken().raw}`,
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('invalid_token');
+  });
+
+  it('rejects an expired download token', async () => {
+    await createVerifiedUser();
+    const id = await accountIdByUsername();
+    const { rawToken } = await createExport(id);
+    await query(
+      "UPDATE data_exports SET expires_at = now() - interval '1 hour' WHERE account_id = $1",
+      [id],
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/auth/export/download?token=${encodeURIComponent(rawToken)}`,
+    });
+    expect(res.statusCode).toBe(410);
+    expect(res.json().error.code).toBe('expired_token');
   });
 });
 

@@ -41,6 +41,7 @@ import {
 } from '../rate-limit/auth-rate-limit.js';
 import { recordAuthEvent } from '../auth/audit.js';
 import { deleteAccount } from '../auth/account.js';
+import { generateExport } from '../auth/data-export.js';
 import { hub } from '../ws/hub.js';
 import { loadConfig } from '../config.js';
 
@@ -317,6 +318,79 @@ export function registerAuthRoutes(app: FastifyInstance): void {
 
     clearAuthCookies(reply);
     return reply.code(200).send();
+  });
+
+  // POST /auth/export (§6). Kicks off an async export of the caller's data and
+  // emails a time-limited download link when ready. Session + CSRF; responds 200
+  // immediately and identically whether or not an export is already in flight
+  // (no state leak). Rate-limited.
+  app.post('/auth/export', async (request, reply) => {
+    const token = request.cookies[SESSION_COOKIE_NAME];
+    if (!token) {
+      return sendError(reply, 'unauthorized', 'Not authenticated');
+    }
+    if (
+      !csrfTokensMatch(
+        request.cookies[CSRF_COOKIE_NAME],
+        request.headers[CSRF_HEADER_NAME.toLowerCase()],
+      )
+    ) {
+      return sendError(reply, 'csrf_failure', 'CSRF token missing or invalid');
+    }
+    const user = await touchSession(token);
+    if (!user) {
+      clearAuthCookies(reply);
+      return sendError(reply, 'unauthorized', 'Not authenticated');
+    }
+
+    if (
+      rateLimited(reply, [
+        { key: ipKey('export', request.ip), rule: AUTH_LIMITS.exportPerIp },
+        {
+          key: accountKey('export', user.id),
+          rule: AUTH_LIMITS.exportPerAccount,
+        },
+      ])
+    ) {
+      return reply;
+    }
+
+    await recordAuthEvent(request.log, 'data_export_requested', {
+      accountId: user.id,
+      ip: request.ip,
+    });
+    // Fire-and-forget: generation + email happen after the response (§6 async).
+    void generateExport(request.log, user.id, user.email);
+    return reply.code(200).send();
+  });
+
+  // GET /auth/export/download?token=… (§6). Serves a generated export by its
+  // opaque token (the bearer capability from the emailed link) — no session, so
+  // it works in any browser. The archive streams as a file attachment.
+  app.get('/auth/export/download', async (request, reply) => {
+    const raw = (request.query as { token?: string }).token;
+    if (!raw) {
+      return sendError(reply, 'validation_error', 'Missing export token');
+    }
+    const { rows } = await query<{
+      content: Buffer;
+      filename: string;
+      expires_at: Date;
+    }>(
+      'SELECT content, filename, expires_at FROM data_exports WHERE token_hash = $1',
+      [hashToken(raw)],
+    );
+    const row = rows[0];
+    if (!row) {
+      return sendError(reply, 'invalid_token', 'This export link is invalid');
+    }
+    if (row.expires_at.getTime() <= Date.now()) {
+      return sendError(reply, 'expired_token', 'This export link has expired');
+    }
+    return reply
+      .header('Content-Type', 'application/json; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="${row.filename}"`)
+      .send(row.content);
   });
 
   // POST /auth/verify-email (§1). Consumes a verification token, marks the
