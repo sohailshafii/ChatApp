@@ -1,10 +1,12 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import { loadConfig } from './config.js';
+import { setAppLogger } from './log.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerConversationRoutes } from './routes/conversations.js';
 import { registerBotRoutes } from './routes/bots.js';
+import { registerPushRoutes } from './routes/push.js';
 import { registerWebSocket } from './ws/server.js';
 
 // Builds the Fastify instance with routes registered but without listening, so
@@ -17,6 +19,7 @@ export function buildApp(): FastifyInstance {
     // Trust Fly's proxy so request IPs are correct for rate limiting later.
     trustProxy: true,
   });
+  setAppLogger(app.log);
 
   // Cookie parsing/serialization for the session + CSRF cookies (§1, §6). No
   // secret: cookies are unsigned (the session token is itself unguessable, CSRF
@@ -27,6 +30,7 @@ export function buildApp(): FastifyInstance {
   registerAuthRoutes(app);
   registerConversationRoutes(app);
   registerBotRoutes(app);
+  registerPushRoutes(app);
   registerWebSocket(app);
 
   return app;

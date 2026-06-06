@@ -204,9 +204,39 @@ expiry, `account_id ON DELETE CASCADE`), and emails a time-limited link
 (`mail/data-export.ts`; logged in dev while `RESEND_API_KEY` is unset). The link
 points at the **token-only** `GET /auth/export/download?token=…` (no session — the
 token is the bearer capability, like verify/reset links), which streams the
-archive as a file attachment (`invalid_token`/`expired_token` otherwise). Async is
-in-process (a real worker/queue is the future home); a retention sweep for expired
-rows is a follow-up. Records the `data_export_requested` audit event.
+archive as a file attachment (`invalid_token`/`expired_token` otherwise). Records
+the `data_export_requested` audit event.
+
+**Follow-up — durability.** Generation is **in-process fire-and-forget** (`void
+generateExport(...)` runs on the same process after the 200) and is **not
+durable**: a crash or redeploy between the response and the `data_exports` INSERT
+loses that export with no retry, and a build/send failure is only logged. The
+upgrade is a **persisted job**: write a `pending` row on request and have a
+sweeper-style worker (à la the session sweeper) generate → mark `ready`/`failed`
+→ email, surviving restarts and giving retries. A retention sweep for expired
+`data_exports` rows is a second follow-up.
+
+#### Web Push (§5)
+
+Closed-tab notifications. `push_subscriptions` (migration 010) stores each
+browser's subscription, keyed by its globally-unique `endpoint` (so register is
+idempotent via `ON CONFLICT`), `account_id ON DELETE CASCADE` (so account deletion
+removes them automatically). Endpoints in `src/routes/push.ts` (all session-gated;
+state-changing ones CSRF-gated): `GET /push/vapid-public-key` (the
+`applicationServerKey`; `internal_error` when no VAPID keypair), `POST
+/push/subscriptions` (`pushSubscriptionSchema`, idempotent, audits
+`push_subscription_added`), `DELETE /push/subscriptions` (own only, 204, audits
+`push_subscription_removed`). The **dispatcher** (`src/push/dispatcher.ts`,
+`dispatchMessagePush`) fires fire-and-forget from `ws/server.ts` (human messages)
+and the bot orchestrator after `bot_end`: for each recipient with **no live socket
+in the `hub`**, it sends `pushPayloadSchema` `{title, body, conversationId}` (title
+= sender username or bot name) to their subscriptions via `web-push`
+(`src/push/sender.ts`; `setPushSender` is a test seam), **pruning** any that return
+404/410. **VAPID keys are optional** (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/
+`VAPID_SUBJECT`); with none, push is disabled (dispatcher no-ops, the key endpoint
+errors) — like the email/bot-key stubs. Offline detection is **per-process** (the
+in-process hub — a recipient on another machine looks offline → a spurious push;
+resolved by the hub→pub/sub move).
 
 #### Rate limiting
 

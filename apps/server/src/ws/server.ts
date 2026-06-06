@@ -18,6 +18,7 @@ import {
   getConversationParticipants,
 } from '../conversations/messages.js';
 import { streamBotReply } from '../bots/orchestrator.js';
+import { dispatchMessagePush } from '../push/dispatcher.js';
 
 // §3 WebSocket messaging server. Attached to Fastify's HTTP server via a manual
 // `upgrade` handler so we control auth and fan-out explicitly (no Socket.IO).
@@ -164,6 +165,9 @@ async function handleSend(
   if (deliveredToPeer) {
     sendFrame(ws, { type: 'delivered', conversationId, messageId: message.id });
   }
+
+  // §5: Web Push to any recipient with no live socket (closed tab). Best-effort.
+  void dispatchMessagePush(message, participants.accountIds);
 
   // Bot conversation: stream the assistant reply (bot_start -> chunks -> bot_end),
   // fire-and-forget so the ack isn't held up.

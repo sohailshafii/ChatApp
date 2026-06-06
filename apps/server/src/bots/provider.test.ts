@@ -23,6 +23,10 @@ function config(overrides: Partial<Config>): Config {
     anthropicModel: 'claude-opus-4-8',
     openaiModel: 'gpt-4o',
     botDailyTokenBudget: 20000,
+    vapidPublicKey: undefined,
+    vapidPrivateKey: undefined,
+    vapidSubject: 'mailto:admin@example.com',
+    vapidConfigured: false,
     cookieSecure: false,
     ...overrides,
   };
