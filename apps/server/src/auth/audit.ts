@@ -10,6 +10,7 @@ export type AuthEvent =
   | 'login_failure'
   | 'password_reset'
   | 'account_deletion'
+  | 'data_export_requested'
   | 'push_subscription_added'
   | 'push_subscription_removed';
 
