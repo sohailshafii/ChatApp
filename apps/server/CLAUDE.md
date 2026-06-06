@@ -204,9 +204,17 @@ expiry, `account_id ON DELETE CASCADE`), and emails a time-limited link
 (`mail/data-export.ts`; logged in dev while `RESEND_API_KEY` is unset). The link
 points at the **token-only** `GET /auth/export/download?token=…` (no session — the
 token is the bearer capability, like verify/reset links), which streams the
-archive as a file attachment (`invalid_token`/`expired_token` otherwise). Async is
-in-process (a real worker/queue is the future home); a retention sweep for expired
-rows is a follow-up. Records the `data_export_requested` audit event.
+archive as a file attachment (`invalid_token`/`expired_token` otherwise). Records
+the `data_export_requested` audit event.
+
+**Follow-up — durability.** Generation is **in-process fire-and-forget** (`void
+generateExport(...)` runs on the same process after the 200) and is **not
+durable**: a crash or redeploy between the response and the `data_exports` INSERT
+loses that export with no retry, and a build/send failure is only logged. The
+upgrade is a **persisted job**: write a `pending` row on request and have a
+sweeper-style worker (à la the session sweeper) generate → mark `ready`/`failed`
+→ email, surviving restarts and giving retries. A retention sweep for expired
+`data_exports` rows is a second follow-up.
 
 #### Rate limiting
 
