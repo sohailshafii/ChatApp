@@ -247,8 +247,11 @@ body carries an identifier) over a 10-minute window; exceeding a cap returns
 **429** with `{"error":{"code":"rate_limited",…}}`. Limits live in `AUTH_LIMITS`.
 
 The same primitive also gates **bot invocation**
-(`src/rate-limit/bot-rate-limit.ts`, `BOT_LIMITS`, per `(user, bot)`); username
-lookup and message send are still to come.
+(`src/rate-limit/bot-rate-limit.ts`, `BOT_LIMITS`, per `(user, bot)`) and
+**message send** (`src/rate-limit/message-rate-limit.ts`, `MESSAGE_LIMITS`, per
+user): the WS `handleSend` checks it before persisting, and over the cap replies
+`error{code:'rate_limited', clientMessageId}` (socket stays open) and stores
+nothing. Username lookup is still to come.
 
 **Global caps across the fleet.** The numbers in `AUTH_LIMITS`/`BOT_LIMITS` are
 **global** (whole-fleet) caps per window, not per-machine. Because the counter is

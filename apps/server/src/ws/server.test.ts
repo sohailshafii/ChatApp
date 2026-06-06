@@ -20,6 +20,11 @@ import {
   botInvocationKey,
   BOT_LIMITS,
 } from '../rate-limit/bot-rate-limit.js';
+import {
+  messageLimiter,
+  messageSendKey,
+  MESSAGE_LIMITS,
+} from '../rate-limit/message-rate-limit.js';
 
 const ORIGIN = loadConfig().appBaseUrl;
 
@@ -50,6 +55,7 @@ afterEach(async () => {
   sockets.length = 0;
   setBotProvider(undefined); // clear any per-test provider override
   botLimiter.reset(); // don't let a saturated bot-invocation window leak
+  messageLimiter.reset();
   await query('TRUNCATE accounts, conversations RESTART IDENTITY CASCADE');
 });
 
@@ -314,6 +320,30 @@ describe('WebSocket messaging (§3)', () => {
     expect(err.type).toBe('error');
     expect(err.code).toBe('validation_error');
     expect(err.clientMessageId).toBe('c1');
+  });
+
+  it('rate-limits a flood of sends with error{rate_limited}, persisting nothing', async () => {
+    const alice = await createUser('alice');
+    const bob = await createUser('bob');
+    const conv = await createConversation(alice.id, bob.id);
+    // Saturate alice's send window directly (avoids sending 30 frames).
+    for (let i = 0; i < MESSAGE_LIMITS.send.max; i++) {
+      messageLimiter.check(messageSendKey(alice.id), MESSAGE_LIMITS.send);
+    }
+    const a = connect(alice.token);
+    await a.opened();
+
+    a.send({ type: 'send', conversationId: conv, clientMessageId: 'c1', content: 'flood' });
+    const err = await a.next();
+    expect(err.type).toBe('error');
+    expect(err.code).toBe('rate_limited');
+    expect(err.clientMessageId).toBe('c1');
+
+    const { rows } = await query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM messages WHERE conversation_id = $1',
+      [conv],
+    );
+    expect(rows[0]!.n).toBe(0); // nothing persisted
   });
 });
 
