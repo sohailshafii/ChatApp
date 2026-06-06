@@ -94,15 +94,25 @@ function preview(content: string): string {
     : codePoints.slice(0, PREVIEW_MAX).join('');
 }
 
+// Stand-in id for a deleted peer: the account row is gone, but the wire `human`
+// peer needs a uuid. Existing conversations are keyed by conversation id, so this
+// is display-only.
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
 function resolvePeer(row: SummaryRow): ConversationPeer {
   if (row.bot_id) {
     const bot = getBot(row.bot_id);
     return { kind: 'bot', id: row.bot_id, name: bot?.name ?? row.bot_id };
   }
-  // Human-human: the non-self participant is guaranteed present (1-on-1).
+  // Human-human. The peer's account is gone when they deleted it (§4/§6): the
+  // conversation and this user's message copies remain, anonymized as
+  // "Deleted user".
+  if (row.peer_account_id == null) {
+    return { kind: 'human', id: NIL_UUID, username: 'Deleted user' };
+  }
   return {
     kind: 'human',
-    id: row.peer_account_id!,
+    id: row.peer_account_id,
     username: row.peer_username!,
   };
 }

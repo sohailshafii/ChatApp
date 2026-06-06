@@ -6,6 +6,7 @@ import {
   resendVerificationRequestSchema,
   passwordResetRequestSchema,
   passwordResetConfirmSchema,
+  deleteAccountRequestSchema,
   SESSION_COOKIE_NAME,
   CSRF_COOKIE_NAME,
   CSRF_HEADER_NAME,
@@ -39,6 +40,8 @@ import {
   accountKey,
 } from '../rate-limit/auth-rate-limit.js';
 import { recordAuthEvent } from '../auth/audit.js';
+import { deleteAccount } from '../auth/account.js';
+import { hub } from '../ws/hub.js';
 import { loadConfig } from '../config.js';
 
 // Postgres unique-violation error code.
@@ -254,6 +257,66 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     await deleteSession(token);
     clearAuthCookies(reply);
     return reply.code(204).send();
+  });
+
+  // DELETE /auth/account (§6). Re-authenticates with the password, then performs
+  // an immediate hard delete: bot conversations are removed, human-conversation
+  // messages are retained (the peer then sees "Deleted user"), and sessions +
+  // tokens go with the account row. State-changing → double-submit CSRF required.
+  app.delete('/auth/account', async (request, reply) => {
+    const token = request.cookies[SESSION_COOKIE_NAME];
+    if (!token) {
+      return sendError(reply, 'unauthorized', 'Not authenticated');
+    }
+    if (
+      !csrfTokensMatch(
+        request.cookies[CSRF_COOKIE_NAME],
+        request.headers[CSRF_HEADER_NAME.toLowerCase()],
+      )
+    ) {
+      return sendError(reply, 'csrf_failure', 'CSRF token missing or invalid');
+    }
+    const user = await touchSession(token);
+    if (!user) {
+      clearAuthCookies(reply);
+      return sendError(reply, 'unauthorized', 'Not authenticated');
+    }
+
+    const parsed = deleteAccountRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(
+        reply,
+        'validation_error',
+        parsed.error.issues[0]?.message ?? 'Invalid request',
+      );
+    }
+
+    // Re-authenticate with the current password (§6 confirmation).
+    const { rows } = await query<{ password_hash: string }>(
+      'SELECT password_hash FROM accounts WHERE id = $1',
+      [user.id],
+    );
+    const hash = rows[0]?.password_hash;
+    if (!hash || !(await verifyPassword(hash, parsed.data.password))) {
+      return sendError(reply, 'invalid_credentials', 'Incorrect password');
+    }
+
+    // Record the event BEFORE the delete so its FK is valid; auth_audit_log's
+    // account_id then SET-NULLs as the account row is removed (audit outlives it).
+    await recordAuthEvent(request.log, 'account_deletion', {
+      accountId: user.id,
+      ip: request.ip,
+    });
+    await deleteAccount(user.id);
+
+    // Best-effort: drop the account's live sockets (its sessions are already
+    // gone, so they could not re-authenticate anyway).
+    for (const socket of hub.socketsForAccount(user.id)) {
+      socket.close();
+    }
+
+    clearAuthCookies(reply);
+    return reply.code(200).send();
   });
 
   // POST /auth/verify-email (§1). Consumes a verification token, marks the

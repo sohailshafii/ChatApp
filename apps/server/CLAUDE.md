@@ -176,6 +176,22 @@ outlives the account (deletion is itself an audited event; §6 keeps audit logs
 deferred follow-ups. Inspect with
 `SELECT account_id, event, ip, created_at FROM auth_audit_log ORDER BY created_at;`.
 
+#### Account deletion (§6)
+
+`DELETE /auth/account` `{password}` (session + double-submit CSRF; re-auths with
+the password, wrong → `invalid_credentials`). Immediate **hard delete**
+(`deleteAccount` in `src/auth/account.ts`, one transaction): bot conversations are
+hard-deleted (messages cascade), then the account row is deleted — cascading
+sessions, tokens, `conversation_participants`, `bot_usage`. The user's
+human-conversation **messages are retained** (`messages.sender_id` is plain text,
+no FK), so the peer keeps their history; `resolvePeer` (in
+`conversations/summaries.ts`) then renders the now-missing peer as the synthetic
+`{kind:'human', id:NIL_UUID, username:'Deleted user'}`. Records the
+`account_deletion` audit event **before** the delete (its `account_id` SET-NULLs
+as the row goes), closes the account's live sockets, clears cookies, returns `200`
+empty. Push-subscription cleanup rides a future `accounts ON DELETE CASCADE` FK
+(no `push_subscriptions` table yet — upcoming §5 work).
+
 #### Rate limiting
 
 Auth endpoints are rate limited (§6) by a single in-memory primitive in

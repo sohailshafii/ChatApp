@@ -32,7 +32,7 @@ afterAll(async () => {
 
 afterEach(async () => {
   await query(
-    'TRUNCATE accounts, sessions, email_verification_tokens, password_reset_tokens RESTART IDENTITY CASCADE',
+    'TRUNCATE accounts, sessions, email_verification_tokens, password_reset_tokens, conversations RESTART IDENTITY CASCADE',
   );
   authLimiter.reset(); // keep rate-limit windows from leaking across tests
 });
@@ -216,6 +216,145 @@ describe('POST /auth/logout', () => {
       headers: { cookie },
     });
     expect(me.statusCode).toBe(401);
+  });
+});
+
+describe('DELETE /auth/account (§6)', () => {
+  async function seedHumanConversation(a: string, b: string): Promise<string> {
+    const { rows } = await query<{ id: string }>(
+      'INSERT INTO conversations DEFAULT VALUES RETURNING id',
+    );
+    const id = rows[0]!.id;
+    await query(
+      `INSERT INTO conversation_participants (conversation_id, account_id)
+       VALUES ($1, $2), ($1, $3)`,
+      [id, a, b],
+    );
+    await query(
+      `INSERT INTO messages (conversation_id, sender_id, content)
+       VALUES ($1, $2, 'from alice'), ($1, $3, 'from bob')`,
+      [id, a, b],
+    );
+    return id;
+  }
+  async function seedBotConversation(a: string): Promise<string> {
+    const { rows } = await query<{ id: string }>(
+      "INSERT INTO conversations (bot_id) VALUES ('assistant') RETURNING id",
+    );
+    const id = rows[0]!.id;
+    await query(
+      'INSERT INTO conversation_participants (conversation_id, account_id) VALUES ($1, $2)',
+      [id, a],
+    );
+    await query(
+      "INSERT INTO messages (conversation_id, sender_id, content) VALUES ($1, $2, 'hi bot')",
+      [id, a],
+    );
+    return id;
+  }
+  const del = (cookie: string, csrf: string, password: string) =>
+    app.inject({
+      method: 'DELETE',
+      url: '/auth/account',
+      headers: { cookie, [CSRF_HEADER_NAME]: csrf },
+      payload: { password },
+    });
+
+  it('requires the CSRF token', async () => {
+    await createVerifiedUser();
+    const { cookie } = await login();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/auth/account',
+      headers: { cookie }, // no X-CSRF-Token
+      payload: { password: PASSWORD },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe('csrf_failure');
+  });
+
+  it('rejects a wrong password and keeps the account', async () => {
+    await createVerifiedUser();
+    const { cookie, csrf } = await login();
+    const res = await del(cookie, csrf, 'not my password');
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error.code).toBe('invalid_credentials');
+    const { rows } = await query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM accounts',
+    );
+    expect(rows[0]!.n).toBe(1); // still there
+  });
+
+  it('hard-deletes the account, drops bot convos, retains human history, audits', async () => {
+    await createVerifiedUser('alice');
+    await createVerifiedUser('bob');
+    const aliceId = await accountIdByUsername('alice');
+    const bobId = await accountIdByUsername('bob');
+    const humanConv = await seedHumanConversation(aliceId, bobId);
+    const botConv = await seedBotConversation(aliceId);
+
+    const { cookie, csrf } = await login('alice');
+    const res = await del(cookie, csrf, PASSWORD);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('');
+
+    // Account + its sessions gone; the prior cookie no longer authenticates.
+    expect(
+      (await query<{ n: number }>('SELECT count(*)::int AS n FROM accounts WHERE id = $1', [aliceId])).rows[0]!.n,
+    ).toBe(0);
+    const me = await app.inject({ method: 'GET', url: '/auth/me', headers: { cookie } });
+    expect(me.statusCode).toBe(401);
+
+    // Bot conversation hard-deleted (messages cascade); human conversation and
+    // alice's message copies retained.
+    expect(
+      (await query<{ n: number }>('SELECT count(*)::int AS n FROM conversations WHERE id = $1', [botConv])).rows[0]!.n,
+    ).toBe(0);
+    expect(
+      (await query<{ n: number }>('SELECT count(*)::int AS n FROM conversations WHERE id = $1', [humanConv])).rows[0]!.n,
+    ).toBe(1);
+    expect(
+      (await query<{ n: number }>('SELECT count(*)::int AS n FROM messages WHERE conversation_id = $1', [humanConv])).rows[0]!.n,
+    ).toBe(2);
+
+    // account_deletion recorded; all of alice's audit rows survive with a null
+    // account_id (ON DELETE SET NULL) now that the account is gone.
+    const audit = await query<{ event: string; account_id: string | null }>(
+      'SELECT event, account_id FROM auth_audit_log',
+    );
+    expect(
+      audit.rows.some(
+        (r) => r.event === 'account_deletion' && r.account_id === null,
+      ),
+    ).toBe(true);
+    expect(audit.rows.every((r) => r.account_id === null)).toBe(true);
+  });
+
+  it("shows the deleted peer as 'Deleted user' in the survivor's list", async () => {
+    await createVerifiedUser('alice');
+    await createVerifiedUser('bob');
+    const aliceId = await accountIdByUsername('alice');
+    const bobId = await accountIdByUsername('bob');
+    await seedHumanConversation(aliceId, bobId);
+
+    const alice = await login('alice');
+    await del(alice.cookie, alice.csrf, PASSWORD);
+
+    const bob = await login('bob');
+    const list = await app.inject({
+      method: 'GET',
+      url: '/conversations',
+      headers: { cookie: bob.cookie },
+    });
+    expect(list.statusCode).toBe(200);
+    const { conversations } = list.json();
+    expect(conversations).toHaveLength(1);
+    expect(conversations[0].peer).toEqual({
+      kind: 'human',
+      id: '00000000-0000-0000-0000-000000000000',
+      username: 'Deleted user',
+    });
+    expect(conversations[0].lastMessage).not.toBeNull(); // history intact
   });
 });
 
