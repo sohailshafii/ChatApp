@@ -18,6 +18,7 @@ import {
   botLimiter,
   BOT_LIMITS,
 } from '../rate-limit/bot-rate-limit.js';
+import { dispatchMessagePush } from '../push/dispatcher.js';
 
 // Streams a bot reply for a send into a bot conversation (§3): bot_start ->
 // bot_chunk* -> bot_end, or bot_error. The message id is assigned up front so the
@@ -89,6 +90,8 @@ export async function streamBotReply(
     }
     const message = await persistBotMessage(conversationId, botId, messageId, content);
     broadcastToAccounts(targets, { type: 'bot_end', message });
+    // §5: push the reply to the user if they closed the tab mid-stream.
+    void dispatchMessagePush(message, participants.accountIds);
   } catch (err) {
     const code = err instanceof BotError ? err.code : 'internal_error';
     broadcastToAccounts(targets, {

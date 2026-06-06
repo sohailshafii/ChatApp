@@ -32,6 +32,13 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().default('gpt-4o'),
   // §cost: per-user/day token guardrail for bot replies (input + output).
   BOT_DAILY_TOKEN_BUDGET: z.coerce.number().int().nonnegative().default(20000),
+
+  // Web Push (§5). Optional in dev: with no keypair, push is disabled (the
+  // dispatcher no-ops, the vapid-public-key endpoint errors). Generate with
+  // `npx web-push generate-vapid-keys`. Prod gets these from Fly secrets (§6).
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default('mailto:admin@example.com'),
 });
 
 export type Config = {
@@ -47,6 +54,11 @@ export type Config = {
   anthropicModel: string;
   openaiModel: string;
   botDailyTokenBudget: number;
+  vapidPublicKey: string | undefined;
+  vapidPrivateKey: string | undefined;
+  vapidSubject: string;
+  // True only when the full VAPID keypair is present; gates Web Push (§5).
+  vapidConfigured: boolean;
   // Whether auth cookies get the Secure attribute. Derived from APP_BASE_URL's
   // scheme: off for local http dev, on for https (prod). See §6.
   cookieSecure: boolean;
@@ -79,6 +91,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     anthropicModel: e.ANTHROPIC_MODEL,
     openaiModel: e.OPENAI_MODEL,
     botDailyTokenBudget: e.BOT_DAILY_TOKEN_BUDGET,
+    vapidPublicKey: e.VAPID_PUBLIC_KEY,
+    vapidPrivateKey: e.VAPID_PRIVATE_KEY,
+    vapidSubject: e.VAPID_SUBJECT,
+    vapidConfigured: Boolean(e.VAPID_PUBLIC_KEY && e.VAPID_PRIVATE_KEY),
     cookieSecure: e.APP_BASE_URL.startsWith('https'),
   };
   return cached;
