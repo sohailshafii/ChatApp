@@ -1,17 +1,22 @@
 import type { FastifyReply } from 'fastify';
 import { sendError } from '../http/errors.js';
-import { RateLimiter, type RateLimitRule } from './rate-limiter.js';
+import { RateLimiter, perMachineMax, type RateLimitRule } from './rate-limiter.js';
 
 // One limiter instance for all auth endpoints (§6). Exported so tests can reset
 // it between cases.
 export const authLimiter = new RateLimiter();
 
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
-const perWindow = (max: number): RateLimitRule => ({ max, windowMs: WINDOW_MS });
+// The number passed here is the GLOBAL (whole-fleet) cap per window; perMachineMax
+// divides it across RATE_LIMIT_MACHINE_COUNT for this in-memory limiter.
+const perWindow = (globalMax: number): RateLimitRule => ({
+  max: perMachineMax(globalMax),
+  windowMs: WINDOW_MS,
+});
 
-// Per-IP and per-account allowances for the auth endpoints §6 calls out (signup,
-// login, password reset, verification resend). Tuned to bound abuse without
-// tripping normal use; revisit against real traffic.
+// Per-IP and per-account GLOBAL allowances for the auth endpoints §6 calls out
+// (signup, login, password reset, verification resend). Tuned to bound abuse
+// without tripping normal use; revisit against real traffic.
 export const AUTH_LIMITS = {
   signupPerIp: perWindow(10),
   loginPerIp: perWindow(20),

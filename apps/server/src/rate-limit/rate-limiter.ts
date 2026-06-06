@@ -1,11 +1,14 @@
 // Fixed-window in-memory rate limiter — the single primitive shared across auth
-// endpoints now, and username lookup / message send / bot invocation later (§6).
+// endpoints + bot invocation (§6), and username lookup / message send later.
 //
-// In-memory means the counters are PER PROCESS: running multiple machines
-// multiplies the effective limit and lets an attacker spread load across them.
-// That is acceptable for v1 (small machine count; auth is low-volume), but the
-// store should move to Redis/Postgres before we scale out. Call sites only touch
-// `check()`, so swapping the backend won't ripple outward.
+// In-memory means the counters are PER PROCESS: each machine counts only its own
+// traffic. We express limits as GLOBAL (whole-fleet) caps and approximate them
+// without a shared store by dividing each cap across the machines we run — see
+// `perMachineMax`. The exact fix is a shared store (Redis/Postgres atomic
+// counters); call sites only touch `check()`, so swapping the backend won't
+// ripple outward.
+
+import { loadConfig } from '../config.js';
 
 export type RateLimitRule = {
   // Maximum allowed hits per key within the window.
@@ -13,6 +16,18 @@ export type RateLimitRule = {
   // Window length in milliseconds.
   windowMs: number;
 };
+
+// Converts a GLOBAL (whole-fleet) cap into the per-machine cap this in-memory
+// limiter enforces, by dividing across RATE_LIMIT_MACHINE_COUNT. With N machines
+// each allowing ceil(G/N), the fleet sums to ~G (slightly over: ceil rounding
+// adds up to N-1, and a cap below N floors at 1/machine). Single machine (N=1)
+// is exact. `machines` is injectable for testing.
+export function perMachineMax(
+  globalMax: number,
+  machines: number = loadConfig().rateLimitMachineCount,
+): number {
+  return Math.max(1, Math.ceil(globalMax / machines));
+}
 
 type Window = { count: number; resetAt: number };
 

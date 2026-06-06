@@ -1,7 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { RateLimiter } from './rate-limiter.js';
+import { RateLimiter, perMachineMax } from './rate-limiter.js';
 
 const rule = { max: 3, windowMs: 1000 };
+
+describe('perMachineMax', () => {
+  it('returns the global cap unchanged on a single machine', () => {
+    expect(perMachineMax(20, 1)).toBe(20);
+    expect(perMachineMax(5, 1)).toBe(5);
+  });
+
+  it('divides the global cap across machines, rounding up', () => {
+    expect(perMachineMax(20, 4)).toBe(5); // exact
+    expect(perMachineMax(5, 2)).toBe(3); // ceil(2.5) — fleet sums to ~6
+    expect(perMachineMax(21, 4)).toBe(6); // ceil(5.25)
+  });
+
+  it('never drops below 1 per machine (tiny cap, many machines)', () => {
+    expect(perMachineMax(3, 10)).toBe(1);
+  });
+});
 
 describe('RateLimiter', () => {
   it('allows up to max hits then blocks within the window', () => {
