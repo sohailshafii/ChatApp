@@ -246,11 +246,34 @@ Auth endpoints are rate limited (§6) by a single in-memory primitive in
 body carries an identifier) over a 10-minute window; exceeding a cap returns
 **429** with `{"error":{"code":"rate_limited",…}}`. Limits live in `AUTH_LIMITS`.
 
-Two known simplifications (follow-ups): the store is **per-process** — move it to
-a shared store (Redis/Postgres) before running multiple machines — and it is a
-fixed window, not the §6 exponential backoff. The same primitive also gates
-**bot invocation** (`src/rate-limit/bot-rate-limit.ts`, `BOT_LIMITS`, per
-`(user, bot)`); username lookup and message send are still to come.
+The same primitive also gates **bot invocation**
+(`src/rate-limit/bot-rate-limit.ts`, `BOT_LIMITS`, per `(user, bot)`); username
+lookup and message send are still to come.
+
+**Global caps across the fleet.** The numbers in `AUTH_LIMITS`/`BOT_LIMITS` are
+**global** (whole-fleet) caps per window, not per-machine. Because the counter is
+**in-memory per process**, N machines each counting independently would otherwise
+let the true cap be N× the intended value (and an attacker just floods — the load
+balancer spreads requests, so they get the extra allowance without knowing N;
+`auto_start_machines` can even raise N under load). To approximate a global cap
+without a shared store, `perMachineMax(globalMax)` (`src/rate-limit/rate-limiter.ts`)
+divides each cap by **`RATE_LIMIT_MACHINE_COUNT`** (env, default 1): each machine
+enforces `ceil(globalMax / N)`, so the fleet sums to ~the global cap.
+
+- **Calculating it.** Set `RATE_LIMIT_MACHINE_COUNT` to the number of machines you
+  run (`fly scale count`). Effective global cap = `N × ceil(G/N)` ≈ `G` — slightly
+  *over* (ceil rounding adds up to `N−1`; a cap `G < N` floors at 1/machine, giving
+  `N`). It's never *under* `G`, so legit users are never wrongly blocked. At one
+  machine (default) the cap is exact. To allow more traffic as capacity grows,
+  raise the global numbers in `AUTH_LIMITS`/`BOT_LIMITS`.
+- **Keep N in sync with reality.** With `auto_start_machines = true`, the *live*
+  machine count can exceed `RATE_LIMIT_MACHINE_COUNT`, weakening the cap — set it
+  to your max provisioned count (or pin `fly scale count`). NB: the in-process WS
+  `hub` already requires effectively one machine until it moves to pub/sub, so v1
+  runs `N = 1` and the cap is exact.
+- **Remaining follow-ups:** the **exact** fix is a shared store (Redis/Postgres
+  atomic counters) which removes the division entirely (and naturally rides the
+  hub→pub/sub move); the window is also **fixed**, not the §6 exponential backoff.
 
 #### Conversations & messages (§2/§3/§4)
 
