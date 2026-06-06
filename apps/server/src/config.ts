@@ -33,6 +33,10 @@ const envSchema = z.object({
   // §cost: per-user/day token guardrail for bot replies (input + output).
   BOT_DAILY_TOKEN_BUDGET: z.coerce.number().int().nonnegative().default(20000),
 
+  // §6 retention: auth audit events are kept this many days, then pruned by the
+  // retention sweeper (operational PII is shorter-lived; audit logs ~180d).
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(180),
+
   // Number of server machines the global rate-limit caps are divided across
   // (§6). The limiter is per-process/in-memory, so a global cap of G is
   // approximated by each machine allowing ceil(G / N). Set this to the number of
@@ -61,6 +65,7 @@ export type Config = {
   anthropicModel: string;
   openaiModel: string;
   botDailyTokenBudget: number;
+  auditRetentionDays: number;
   rateLimitMachineCount: number;
   vapidPublicKey: string | undefined;
   vapidPrivateKey: string | undefined;
@@ -99,6 +104,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     anthropicModel: e.ANTHROPIC_MODEL,
     openaiModel: e.OPENAI_MODEL,
     botDailyTokenBudget: e.BOT_DAILY_TOKEN_BUDGET,
+    auditRetentionDays: e.AUDIT_RETENTION_DAYS,
     rateLimitMachineCount: e.RATE_LIMIT_MACHINE_COUNT,
     vapidPublicKey: e.VAPID_PUBLIC_KEY,
     vapidPrivateKey: e.VAPID_PRIVATE_KEY,

@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { query } from '../db/pool.js';
+import { loadConfig } from '../config.js';
 
 // Per-account auth event log (§6), table auth_audit_log (migration 008). Exists
 // from v1 so a "recent activity" view can be surfaced later. `login`,
@@ -38,4 +39,17 @@ export async function recordAuthEvent(
   } catch (err) {
     log.error({ err, event }, 'failed to record auth audit event');
   }
+}
+
+// Prunes audit events older than the retention window (§6, ~180d). Returns the
+// number of rows removed. `retentionDays` is injectable for testing.
+export async function sweepOldAuditEvents(
+  retentionDays: number = loadConfig().auditRetentionDays,
+): Promise<number> {
+  const { rowCount } = await query(
+    `DELETE FROM auth_audit_log
+      WHERE created_at < now() - ($1 || ' days')::interval`,
+    [String(retentionDays)],
+  );
+  return rowCount ?? 0;
 }

@@ -134,12 +134,17 @@ Cookie/header names are exported from `@chatapp/shared`
 server can't drift. Sessions use a 30-day sliding expiry (each authenticated
 request bumps `last_active_at`); inspect them with
 `SELECT account_id, last_active_at FROM sessions;`. `touchSession` *rejects* rows
-past the window; a **session sweeper** (`src/auth/session-sweeper.ts`,
-`startSessionSweeper`, started from `index.ts` after listen, every 6h + once at
-boot) *deletes* them via `sweepExpiredSessions`. It's an in-process unref'd
-interval (per-machine; a single scheduled job is the cleaner multi-machine home,
-alongside the rate-limit shared-store move) and is wired only in the entrypoint,
-so tests using `buildApp()` don't spin up a timer.
+past the window; the **retention sweeper** (`src/auth/retention.ts`,
+`startRetentionSweeper`, started from `index.ts` after listen, every 6h + once at
+boot) *deletes* them. It runs a list of `RETENTION_TASKS` — the "delete" half of
+every expiry policy (§6/§7): **sessions** (`sweepExpiredSessions`, past the 30-day
+window), **data_exports** (`sweepExpiredDataExports`, past the 24h download link —
+dead bytea + PII), and **auth_audit_log** (`sweepOldAuditEvents`, older than
+`AUDIT_RETENTION_DAYS`, default 180). A failing task is logged and doesn't stop
+the others. In-process unref'd interval (per-machine; a single scheduled job is
+the cleaner multi-machine home, alongside the rate-limit shared-store / hub→pub-sub
+moves), wired only in the entrypoint so tests using `buildApp()` don't spin a
+timer.
 
 #### Password reset
 

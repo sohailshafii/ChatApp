@@ -23,6 +23,7 @@ function config(overrides: Partial<Config>): Config {
     anthropicModel: 'claude-opus-4-8',
     openaiModel: 'gpt-4o',
     botDailyTokenBudget: 20000,
+    auditRetentionDays: 180,
     rateLimitMachineCount: 1,
     vapidPublicKey: undefined,
     vapidPrivateKey: undefined,

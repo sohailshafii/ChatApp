@@ -1,7 +1,7 @@
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { closePool } from './db/pool.js';
-import { startSessionSweeper } from './auth/session-sweeper.js';
+import { startRetentionSweeper } from './auth/retention.js';
 
 async function main(): Promise<void> {
   const { host, port } = loadConfig();
@@ -20,8 +20,8 @@ async function main(): Promise<void> {
 
   try {
     await app.listen({ host, port });
-    // Start the periodic expired-session cleanup once we're listening (§7).
-    stopSweeper = startSessionSweeper(app.log);
+    // Start the periodic retention cleanup once we're listening (§6/§7).
+    stopSweeper = startRetentionSweeper(app.log);
   } catch (err) {
     app.log.error(err, 'failed to start server');
     process.exit(1);
