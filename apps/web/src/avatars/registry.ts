@@ -1,0 +1,17 @@
+import type { ConversationPeer } from '@chatapp/shared';
+import grik from './grik.svg';
+
+// Bundled custom avatar images (§2), swappable in code — no server involved.
+// To add one: drop an image in src/avatars/, import it here, and map it by peer
+// below. Anything not mapped falls back to the emoji (see Avatar / peerEmoji).
+
+// Keyed by the bot's stable id (slug).
+const BOT_IMAGES: Record<string, string> = {
+  assistant: grik, // Grik the Lizardman
+};
+
+// Specific humans could be mapped by id later (e.g. HUMAN_IMAGES[peer.id]).
+export function customAvatar(peer: ConversationPeer): string | undefined {
+  if (peer.kind === 'bot') return BOT_IMAGES[peer.id];
+  return undefined;
+}

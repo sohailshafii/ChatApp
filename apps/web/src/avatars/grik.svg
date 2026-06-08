@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Grik the Lizardman">
+  <circle cx="32" cy="32" r="32" fill="#3aa856"/>
+  <circle cx="23" cy="26" r="7" fill="#ffffff"/>
+  <circle cx="41" cy="26" r="7" fill="#ffffff"/>
+  <circle cx="24" cy="27" r="3.2" fill="#13241a"/>
+  <circle cx="40" cy="27" r="3.2" fill="#13241a"/>
+  <path d="M21 40 Q32 49 43 40" fill="none" stroke="#13351f" stroke-width="3" stroke-linecap="round"/>
+  <path d="M32 44 L32 53" stroke="#d6336c" stroke-width="3" stroke-linecap="round"/>
+  <path d="M32 53 l-3.5 3.5 M32 53 l3.5 3.5" stroke="#d6336c" stroke-width="3" stroke-linecap="round"/>
+</svg>
