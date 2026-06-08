@@ -435,3 +435,7 @@ npm run build -w @chatapp/server
 ## Hosting
 
 - Fly.io app, region `iad` for v1. See [`fly.toml`](../../fly.toml) at the repo root.
+- **Pinned to one machine (`N = 1`)** — the in-process rate-limit counters and WS
+  `hub` aren't shared across machines yet. The plan to scale out (Redis-backed
+  counters + pub/sub fan-out, phased) is scoped in
+  [`docs/multi-machine.md`](../../docs/multi-machine.md).
