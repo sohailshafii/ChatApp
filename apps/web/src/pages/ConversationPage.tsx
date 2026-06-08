@@ -12,6 +12,7 @@ import {
 } from '../api/conversations';
 import { MessageList } from '../components/MessageList';
 import { Composer } from '../components/Composer';
+import { Avatar } from '../components/Avatar';
 import { peerName } from '../lib/peer';
 
 const PAGE_SIZE = 50;
@@ -158,6 +159,7 @@ export function ConversationPage() {
         <Link to="/" className="back-link" aria-label="Back to chats">
           ←
         </Link>
+        <Avatar peer={load.conversation.peer} />
         <h1 id="conversation-heading">{name}</h1>
         <button
           type="button"
