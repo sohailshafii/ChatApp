@@ -38,6 +38,9 @@ import {
   AUTH_LIMITS,
   ipKey,
   accountKey,
+  loginBackoff,
+  LOGIN_BACKOFF,
+  sendBackoff,
 } from '../rate-limit/auth-rate-limit.js';
 import { recordAuthEvent } from '../auth/audit.js';
 import { deleteAccount } from '../auth/account.js';
@@ -161,16 +164,22 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     }
     const { username, password } = parsed.data;
 
+    // Per-IP volumetric cap bounds an IP sweeping many usernames; the per-account
+    // dimension is handled by exponential backoff (§6), below.
     if (
       rateLimited(reply, [
         { key: ipKey('login', request.ip), rule: AUTH_LIMITS.loginPerIp },
-        {
-          key: accountKey('login', username),
-          rule: AUTH_LIMITS.loginPerAccount,
-        },
       ])
     ) {
       return reply;
+    }
+
+    // Exponential backoff on repeated failed logins for this username (§6). While
+    // locked out, reject before touching the DB or hashing — no work, no leak.
+    const backoffKey = accountKey('login', username);
+    const retryAfter = loginBackoff.retryAfter(backoffKey, LOGIN_BACKOFF);
+    if (retryAfter > 0) {
+      return sendBackoff(reply, retryAfter);
     }
 
     const { rows } = await query<AccountRow & { password_hash: string }>(
@@ -185,6 +194,9 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     // the response does not reveal which usernames exist (§1).
     if (!account || !(await verifyPassword(account.password_hash, password))) {
       // account is set for a wrong password, undefined for an unknown username.
+      // A wrong/unknown credential is the failure that drives backoff (§6); an
+      // unknown username is keyed the same way, which doesn't leak existence.
+      loginBackoff.recordFailure(backoffKey, LOGIN_BACKOFF);
       await recordAuthEvent(request.log, 'login_failure', {
         accountId: account?.id ?? null,
         ip: request.ip,
@@ -209,6 +221,10 @@ export function registerAuthRoutes(app: FastifyInstance): void {
         'Please verify your email before logging in',
       );
     }
+
+    // A successful login clears any failure streak so an honest user who mistyped
+    // a few times isn't carrying a lockout into their next session (§6).
+    loginBackoff.recordSuccess(backoffKey);
 
     const sessionToken = await createSession(account.id);
     reply.setCookie(SESSION_COOKIE_NAME, sessionToken, sessionCookieOptions);
