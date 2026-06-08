@@ -252,6 +252,20 @@ Auth endpoints are rate limited (§6) by a single in-memory primitive in
 body carries an identifier) over a 10-minute window; exceeding a cap returns
 **429** with `{"error":{"code":"rate_limited",…}}`. Limits live in `AUTH_LIMITS`.
 
+**Login uses exponential backoff on repeated failure** (§6) instead of a per-
+account volumetric cap. A second primitive, `FailureBackoff`
+(`src/rate-limit/backoff.ts`, instance `loginBackoff` + rule `LOGIN_BACKOFF`),
+tracks *consecutive failed logins* per username: after `freeRetries` (3) typos it
+locks the account out for `baseMs·2^n` — 1s, 2s, 4s … capped at 15 min — checked
+**before** the DB read/password hash, and the 429 carries a **`Retry-After`**
+header (`sendBackoff`). A **successful login clears the streak**, so an honest
+user who mistyped isn't penalized; only grinding one credential escalates. Keyed
+by the submitted username (unknown usernames included — same generic
+`invalid_credentials`, no enumeration). The per-IP `loginPerIp` volumetric cap
+still bounds an IP sweeping many usernames. Unlike the volume caps, backoff delays
+are **not** `perMachineMax`-divided — each machine applies the full delay. The
+`unverified` branch (correct password) does **not** count as a backoff failure.
+
 The same primitive also gates **bot invocation**
 (`src/rate-limit/bot-rate-limit.ts`, `BOT_LIMITS`, per `(user, bot)`) and
 **message send** (`src/rate-limit/message-rate-limit.ts`, `MESSAGE_LIMITS`, per
@@ -288,7 +302,9 @@ enforces `ceil(globalMax / N)`, so the fleet sums to ~the global cap.
   runs `N = 1` and the cap is exact.
 - **Remaining follow-ups:** the **exact** fix is a shared store (Redis/Postgres
   atomic counters) which removes the division entirely (and naturally rides the
-  hub→pub/sub move); the window is also **fixed**, not the §6 exponential backoff.
+  hub→pub/sub move). (The §6 **exponential backoff** for repeated failure now
+  exists for login — see `FailureBackoff` above; the *volumetric* windows are
+  still fixed, which is the right shape for them.)
 
 #### Conversations & messages (§2/§3/§4)
 

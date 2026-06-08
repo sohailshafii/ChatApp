@@ -8,7 +8,12 @@ import {
 import { buildApp } from '../app.js';
 import { query, closePool } from '../db/pool.js';
 import { generateToken } from '../auth/tokens.js';
-import { authLimiter, AUTH_LIMITS } from '../rate-limit/auth-rate-limit.js';
+import {
+  authLimiter,
+  AUTH_LIMITS,
+  loginBackoff,
+  LOGIN_BACKOFF,
+} from '../rate-limit/auth-rate-limit.js';
 import { buildExport } from '../auth/data-export.js';
 
 // Exercises the §1 auth flow end-to-end against the dedicated test database
@@ -36,6 +41,7 @@ afterEach(async () => {
     'TRUNCATE accounts, sessions, email_verification_tokens, password_reset_tokens, conversations RESTART IDENTITY CASCADE',
   );
   authLimiter.reset(); // keep rate-limit windows from leaking across tests
+  loginBackoff.reset(); // and login-failure lockouts
 });
 
 function getCookie(res: InjectResponse, name: string) {
@@ -888,20 +894,49 @@ describe('auth rate limiting (§6)', () => {
     expect(other.statusCode).toBe(200);
   });
 
-  it('limits login per account, independent of other usernames', async () => {
+  it('backs off repeated failed logins per account, independent of other usernames', async () => {
     const attempt = (username: string) =>
       app.inject({
         method: 'POST',
         url: '/auth/login',
         payload: { username, password: 'whatever-password' },
       });
-    for (let i = 0; i < AUTH_LIMITS.loginPerAccount.max; i++) {
-      expect((await attempt('ghost')).statusCode).toBe(401); // unknown user
+    // freeRetries failures, then one more that engages the lockout — all 401.
+    for (let i = 0; i <= LOGIN_BACKOFF.freeRetries; i++) {
+      expect((await attempt('ghost')).statusCode).toBe(401);
     }
+    // Now locked out: 429 rate_limited with a Retry-After header, before any DB work.
     const blocked = await attempt('ghost');
     expect(blocked.statusCode).toBe(429);
     expect(blocked.json().error.code).toBe('rate_limited');
+    expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);
 
-    expect((await attempt('phantom')).statusCode).toBe(401); // separate counter
+    // A different username has its own streak — not affected by ghost's lockout.
+    expect((await attempt('phantom')).statusCode).toBe(401);
+  });
+
+  it('a successful login clears the failure streak', async () => {
+    await createVerifiedUser();
+    // Fail right up to (but not past) the free-retry grace, then log in.
+    for (let i = 0; i < LOGIN_BACKOFF.freeRetries; i++) {
+      const bad = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { username: 'alice', password: 'definitely not it' },
+      });
+      expect(bad.statusCode).toBe(401);
+    }
+    const { res } = await login();
+    expect(res.statusCode).toBe(200);
+
+    // Streak reset: the same number of failures again still doesn't lock out.
+    for (let i = 0; i < LOGIN_BACKOFF.freeRetries; i++) {
+      const bad = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { username: 'alice', password: 'definitely not it' },
+      });
+      expect(bad.statusCode).toBe(401);
+    }
   });
 });

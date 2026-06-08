@@ -1,10 +1,29 @@
 import type { FastifyReply } from 'fastify';
 import { sendError } from '../http/errors.js';
 import { RateLimiter, perMachineMax, type RateLimitRule } from './rate-limiter.js';
+import { FailureBackoff, type BackoffRule } from './backoff.js';
 
 // One limiter instance for all auth endpoints (§6). Exported so tests can reset
 // it between cases.
 export const authLimiter = new RateLimiter();
+
+// Failure-driven exponential backoff for repeated *failed logins* (§6) — the
+// "exponential backoff on repeated failure" the spec asks for, keyed per account.
+// It supersedes a crude per-account volumetric cap, which counted successes too
+// and didn't escalate; here an honest user resets the streak by logging in, while
+// an attacker grinding one credential is locked out for geometrically longer. The
+// per-IP volumetric cap (loginPerIp, below) still bounds an IP sweeping many
+// usernames. Exported so tests can reset it between cases.
+export const loginBackoff = new FailureBackoff();
+
+// 3 free attempts (typos), then lock 1s, 2s, 4s … doubling up to 15 min. Caps are
+// NOT per-machine-divided: backoff is a per-key escalation, not a fleet-summed
+// volume, so each machine should apply the full delay independently.
+export const LOGIN_BACKOFF: BackoffRule = {
+  freeRetries: 3,
+  baseMs: 1_000,
+  maxMs: 15 * 60 * 1000,
+};
 
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 // The number passed here is the GLOBAL (whole-fleet) cap per window; perMachineMax
@@ -19,8 +38,9 @@ const perWindow = (globalMax: number): RateLimitRule => ({
 // without tripping normal use; revisit against real traffic.
 export const AUTH_LIMITS = {
   signupPerIp: perWindow(10),
+  // Login has no per-account volumetric cap — repeated failures are handled by
+  // loginBackoff (above); this per-IP cap bounds an IP sweeping many usernames.
   loginPerIp: perWindow(20),
-  loginPerAccount: perWindow(5),
   resendPerIp: perWindow(5),
   resendPerAccount: perWindow(5),
   resetPerIp: perWindow(5),
@@ -38,6 +58,18 @@ export function accountKey(action: string, identifier: string): string {
 
 export function ipKey(action: string, ip: string): string {
   return `${action}:ip:${ip}`;
+}
+
+// Sends the standard 429 rate_limited response for a backoff lockout, adding a
+// Retry-After header (seconds, rounded up) so a well-behaved client knows how long
+// to wait before retrying.
+export function sendBackoff(reply: FastifyReply, retryAfterMs: number): FastifyReply {
+  reply.header('Retry-After', Math.ceil(retryAfterMs / 1000));
+  return sendError(
+    reply,
+    'rate_limited',
+    'Too many failed attempts. Please wait a bit and try again.',
+  );
 }
 
 // Applies each (key, rule) check in order. On the first breach it sends a 429
