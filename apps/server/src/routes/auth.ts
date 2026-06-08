@@ -41,7 +41,7 @@ import {
 } from '../rate-limit/auth-rate-limit.js';
 import { recordAuthEvent } from '../auth/audit.js';
 import { deleteAccount } from '../auth/account.js';
-import { generateExport } from '../auth/data-export.js';
+import { enqueueExport } from '../auth/data-export.js';
 import { hub } from '../ws/hub.js';
 import { loadConfig } from '../config.js';
 
@@ -359,8 +359,9 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       accountId: user.id,
       ip: request.ip,
     });
-    // Fire-and-forget: generation + email happen after the response (§6 async).
-    void generateExport(request.log, user.id, user.email);
+    // Durably enqueue the job (committed before the 200); the export worker
+    // generates it and emails the link (§6 async).
+    await enqueueExport(user.id);
     return reply.code(200).send();
   });
 
@@ -377,7 +378,8 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       filename: string;
       expires_at: Date;
     }>(
-      'SELECT content, filename, expires_at FROM data_exports WHERE token_hash = $1',
+      `SELECT content, filename, expires_at FROM data_exports
+        WHERE token_hash = $1 AND status = 'ready'`,
       [hashToken(raw)],
     );
     const row = rows[0];

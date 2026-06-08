@@ -2,15 +2,16 @@ import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { closePool } from './db/pool.js';
 import { startRetentionSweeper } from './auth/retention.js';
+import { startExportWorker } from './auth/export-worker.js';
 
 async function main(): Promise<void> {
   const { host, port } = loadConfig();
   const app = buildApp();
 
-  let stopSweeper: (() => void) | undefined;
+  const background: (() => void)[] = [];
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'shutting down');
-    stopSweeper?.();
+    for (const stop of background) stop();
     await app.close();
     await closePool();
     process.exit(0);
@@ -20,8 +21,9 @@ async function main(): Promise<void> {
 
   try {
     await app.listen({ host, port });
-    // Start the periodic retention cleanup once we're listening (§6/§7).
-    stopSweeper = startRetentionSweeper(app.log);
+    // Start background jobs once we're listening: retention cleanup (§6/§7) and
+    // the durable data-export worker (§6).
+    background.push(startRetentionSweeper(app.log), startExportWorker(app.log));
   } catch (err) {
     app.log.error(err, 'failed to start server');
     process.exit(1);
