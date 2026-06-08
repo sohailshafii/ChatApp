@@ -22,6 +22,10 @@ import { hashPassword } from '../auth/passwords.js';
 import { createSession } from '../auth/sessions.js';
 import { getBot, listBots } from '../bots/registry.js';
 import { createMessage } from '../conversations/messages.js';
+import {
+  usernameLookupLimiter,
+  USERNAME_LOOKUP_LIMITS,
+} from '../rate-limit/username-lookup-rate-limit.js';
 
 let app: FastifyInstance;
 
@@ -38,6 +42,7 @@ afterAll(async () => {
 afterEach(async () => {
   // Truncating both roots cascades to participants, sessions, and tokens.
   await query('TRUNCATE accounts, conversations RESTART IDENTITY CASCADE');
+  usernameLookupLimiter.reset(); // the per-IP window is shared across tests
 });
 
 // Creates a verified account with an active session; returns its id + Cookie header.
@@ -485,6 +490,36 @@ describe('POST /conversations', () => {
       payload: { peerKind: 'human', username: 'bob' },
     });
     expect(anon.statusCode).toBe(401);
+  });
+
+  it('rate-limits username lookups once the per-account cap is hit (§6)', async () => {
+    const alice = await createUserWithSession('alice');
+    const cap = USERNAME_LOOKUP_LIMITS.perAccount.max;
+
+    // Sweep candidates (all miss → 404 not_found) up to the cap.
+    for (let i = 0; i < cap; i++) {
+      const res = await start(alice.cookie, {
+        peerKind: 'human',
+        username: `ghost${i}`,
+      });
+      expect(res.statusCode).toBe(404);
+    }
+
+    // The next lookup is over the cap: 429 rate_limited, no DB lookup.
+    const blocked = await start(alice.cookie, { peerKind: 'human', username: 'ghost' });
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json().error.code).toBe('rate_limited');
+  });
+
+  it('does not rate-limit bot-peer resolution', async () => {
+    const alice = await createUserWithSession('alice');
+    // Exhaust the human-lookup allowance...
+    for (let i = 0; i < USERNAME_LOOKUP_LIMITS.perAccount.max; i++) {
+      await start(alice.cookie, { peerKind: 'human', username: `ghost${i}` });
+    }
+    // ...a bot peer still resolves (its id isn't a username lookup).
+    const res = await start(alice.cookie, { peerKind: 'bot', botId: 'assistant' });
+    expect(res.statusCode).toBe(200);
   });
 });
 

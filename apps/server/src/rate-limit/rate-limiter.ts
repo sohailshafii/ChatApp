@@ -1,5 +1,5 @@
 // Fixed-window in-memory rate limiter — the single primitive shared across auth
-// endpoints + bot invocation (§6), and username lookup / message send later.
+// endpoints, bot invocation, message send, and username lookup (§6).
 //
 // In-memory means the counters are PER PROCESS: each machine counts only its own
 // traffic. We express limits as GLOBAL (whole-fleet) caps and approximate them

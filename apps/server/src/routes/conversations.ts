@@ -20,6 +20,12 @@ import {
   markRead,
 } from '../conversations/messages.js';
 import { startConversation, hideConversation } from '../conversations/manage.js';
+import {
+  usernameLookupLimiter,
+  USERNAME_LOOKUP_LIMITS,
+  usernameLookupAccountKey,
+  usernameLookupIpKey,
+} from '../rate-limit/username-lookup-rate-limit.js';
 import { sendError } from '../http/errors.js';
 
 const uuidSchema = z.string().uuid();
@@ -57,6 +63,31 @@ export function registerConversationRoutes(app: FastifyInstance): void {
           'validation_error',
           parsed.error.issues[0]?.message ?? 'Invalid request',
         );
+      }
+      // Rate-limit the username lookup (§6): a human peer is resolved by exact
+      // username, so an unbounded caller could enumerate accounts. Check before
+      // the DB hit, and only for human peers — bot ids resolve against the
+      // in-process registry, not a lookup. Order: per-account first (consumes a
+      // hit, then short-circuits without consuming the per-IP allowance on a
+      // breach), matching the auth limiter.
+      if (parsed.data.peerKind === 'human') {
+        const accountId = request.authUser!.id;
+        const overLimit =
+          !usernameLookupLimiter.check(
+            usernameLookupAccountKey(accountId),
+            USERNAME_LOOKUP_LIMITS.perAccount,
+          ) ||
+          !usernameLookupLimiter.check(
+            usernameLookupIpKey(request.ip),
+            USERNAME_LOOKUP_LIMITS.perIp,
+          );
+        if (overLimit) {
+          return sendError(
+            reply,
+            'rate_limited',
+            'Too many lookups. Please wait a bit and try again.',
+          );
+        }
       }
       const conversationId = await startConversation(
         request.authUser!.id,
