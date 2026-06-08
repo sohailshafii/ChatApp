@@ -74,19 +74,29 @@ describe('retention sweeps (DB)', () => {
     return rows[0]!.id;
   }
 
-  it('sweepExpiredDataExports deletes past-expiry rows, keeps live ones', async () => {
+  it('sweepExpiredDataExports prunes ready-expired / failed / abandoned, keeps live', async () => {
     const acct = await anAccount();
-    const ins = (token: string, when: string) =>
+    const readyExport = (token: string, hours: string) =>
       query(
-        `INSERT INTO data_exports (token_hash, account_id, content, filename, expires_at)
-         VALUES ($1, $2, $3, 'e.json', now() + ($4 || ' hours')::interval)`,
-        [token, acct, Buffer.from('archive'), when],
+        `INSERT INTO data_exports (token_hash, account_id, content, filename, expires_at, status)
+         VALUES ($1, $2, $3, 'e.json', now() + ($4 || ' hours')::interval, 'ready')`,
+        [token, acct, Buffer.from('archive'), hours],
       );
-    await ins('dead', '-1'); // expired an hour ago
-    await ins('live', '1'); // expires in an hour
+    await readyExport('dead', '-1'); // ready but expired an hour ago → pruned
+    await readyExport('live', '1'); // ready, expires in an hour → kept
+    // a failed job and an abandoned (2-day-old) pending job → both pruned
+    await query(
+      `INSERT INTO data_exports (account_id, status) VALUES ($1, 'failed')`,
+      [acct],
+    );
+    await query(
+      `INSERT INTO data_exports (account_id, status, created_at)
+       VALUES ($1, 'pending', now() - interval '2 days')`,
+      [acct],
+    );
 
-    expect(await sweepExpiredDataExports()).toBe(1);
-    const { rows } = await query<{ token_hash: string }>(
+    expect(await sweepExpiredDataExports()).toBe(3);
+    const { rows } = await query<{ token_hash: string | null }>(
       'SELECT token_hash FROM data_exports',
     );
     expect(rows).toEqual([{ token_hash: 'live' }]);

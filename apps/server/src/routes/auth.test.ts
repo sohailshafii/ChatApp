@@ -9,7 +9,7 @@ import { buildApp } from '../app.js';
 import { query, closePool } from '../db/pool.js';
 import { generateToken } from '../auth/tokens.js';
 import { authLimiter, AUTH_LIMITS } from '../rate-limit/auth-rate-limit.js';
-import { createExport } from '../auth/data-export.js';
+import { buildExport } from '../auth/data-export.js';
 
 // Exercises the §1 auth flow end-to-end against the dedicated test database
 // (provisioned in global-setup) — the curl flow from apps/server/CLAUDE.md,
@@ -727,12 +727,37 @@ describe('data export (§6)', () => {
     expect(res.json().error.code).toBe('csrf_failure');
   });
 
-  it('accepts the request (200 empty) and audits it', async () => {
+  // Inserts a ready archive for an account under a fresh token (the worker's
+  // output), so the download endpoint can be tested without running the worker.
+  async function insertReadyExport(
+    accountId: string,
+    { expired = false } = {},
+  ): Promise<{ rawToken: string; filename: string }> {
+    const archive = await buildExport(accountId);
+    const token = generateToken();
+    const filename = 'chatapp-export-test.json';
+    await query(
+      `INSERT INTO data_exports (token_hash, account_id, content, filename, expires_at, status)
+       VALUES ($1, $2, $3, $4, now() + ($5 || ' hours')::interval, 'ready')`,
+      [token.hash, accountId, Buffer.from(JSON.stringify(archive)), filename, expired ? '-1' : '1'],
+    );
+    return { rawToken: token.raw, filename };
+  }
+
+  it('durably enqueues a pending job (200 empty) and audits it', async () => {
     await createVerifiedUser();
+    const id = await accountIdByUsername();
     const { cookie, csrf } = await login();
     const res = await exportReq(cookie, csrf);
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('');
+    // A durable pending job row exists (no token/content until the worker runs).
+    const job = await query<{ status: string; token_hash: string | null }>(
+      'SELECT status, token_hash FROM data_exports WHERE account_id = $1',
+      [id],
+    );
+    expect(job.rows).toHaveLength(1);
+    expect(job.rows[0]).toMatchObject({ status: 'pending', token_hash: null });
     const audit = await query<{ n: number }>(
       "SELECT count(*)::int AS n FROM auth_audit_log WHERE event = 'data_export_requested'",
     );
@@ -782,9 +807,8 @@ describe('data export (§6)', () => {
       [bc[0]!.id, aliceId],
     );
 
-    // Build the export directly (the route fires this in the background).
-    const { rawToken, filename } = await createExport(aliceId);
-    expect(filename).toMatch(/^chatapp-export-\d{4}-\d{2}-\d{2}\.json$/);
+    // A ready export (the worker's output) for alice.
+    const { rawToken, filename } = await insertReadyExport(aliceId);
 
     const dl = await app.inject({
       method: 'GET',
@@ -815,11 +839,7 @@ describe('data export (§6)', () => {
   it('rejects an expired download token', async () => {
     await createVerifiedUser();
     const id = await accountIdByUsername();
-    const { rawToken } = await createExport(id);
-    await query(
-      "UPDATE data_exports SET expires_at = now() - interval '1 hour' WHERE account_id = $1",
-      [id],
-    );
+    const { rawToken } = await insertReadyExport(id, { expired: true });
     const res = await app.inject({
       method: 'GET',
       url: `/auth/export/download?token=${encodeURIComponent(rawToken)}`,

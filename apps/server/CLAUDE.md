@@ -200,26 +200,27 @@ empty. Push-subscription cleanup rides a future `accounts ON DELETE CASCADE` FK
 #### Data export (§6)
 
 `POST /auth/export` (no body; session + double-submit CSRF; rate-limited via
-`AUTH_LIMITS.exportPer*` → `rate_limited`). Responds **200 empty immediately and
-identically** whether or not an export is already in flight (no state leak), then
-**fire-and-forget** `generateExport` (`src/auth/data-export.ts`) builds the
-archive — profile + conversation metadata + full message content — as JSON, stores
-it in `data_exports` (migration 009, `bytea` content keyed by a hashed token, 24h
-expiry, `account_id ON DELETE CASCADE`), and emails a time-limited link
-(`mail/data-export.ts`; logged in dev while `RESEND_API_KEY` is unset). The link
-points at the **token-only** `GET /auth/export/download?token=…` (no session — the
-token is the bearer capability, like verify/reset links), which streams the
-archive as a file attachment (`invalid_token`/`expired_token` otherwise). Records
-the `data_export_requested` audit event.
+`AUTH_LIMITS.exportPer*` → `rate_limited`; records the `data_export_requested`
+audit event). It **durably enqueues a job** — `enqueueExport` inserts a `pending`
+row in `data_exports` (migration 009, now a job table per migration 011) *before*
+the **200**, so a crash can't lose the request — and responds 200 empty
+identically whether or not one is already in flight (no state leak).
 
-**Follow-up — durability.** Generation is **in-process fire-and-forget** (`void
-generateExport(...)` runs on the same process after the 200) and is **not
-durable**: a crash or redeploy between the response and the `data_exports` INSERT
-loses that export with no retry, and a build/send failure is only logged. The
-upgrade is a **persisted job**: write a `pending` row on request and have a
-sweeper-style worker (à la the session sweeper) generate → mark `ready`/`failed`
-→ email, surviving restarts and giving retries. A retention sweep for expired
-`data_exports` rows is a second follow-up.
+The **export worker** (`src/auth/export-worker.ts`, `startExportWorker`, every 60s
++ once at boot, started only from `index.ts`) calls `processPendingExports`: it
+claims pending rows with **`FOR UPDATE SKIP LOCKED`** (multi-machine-safe; one
+machine in v1), builds the archive — profile + conversation metadata + full
+message content, JSON — generates a token, and flips the row to `ready`
+(`token_hash`/`content`/`filename`/`expires_at` set), then emails the link
+(`mail/data-export.ts`; logged in dev while `RESEND_API_KEY` unset) after commit.
+A build failure increments `attempts` and retries up to `MAX_EXPORT_ATTEMPTS` (3),
+then marks the row `failed`. A pending job survives a restart — the worker picks
+it up on the next boot. The link points at the **token-only** `GET
+/auth/export/download?token=…` (no session — bearer capability like verify/reset),
+which serves a **`ready`** archive as a file attachment
+(`invalid_token`/`expired_token` otherwise). The retention sweep
+(`sweepExpiredDataExports`) prunes `ready` rows past their 24h window, plus
+`failed` and day-old abandoned `pending` jobs.
 
 #### Web Push (§5)
 

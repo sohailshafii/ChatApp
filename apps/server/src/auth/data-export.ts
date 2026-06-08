@@ -1,5 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
-import { query } from '../db/pool.js';
+import { query, getPool } from '../db/pool.js';
 import { generateToken } from './tokens.js';
 import { getBot } from '../bots/registry.js';
 import { loadConfig } from '../config.js';
@@ -106,47 +106,117 @@ export async function buildExport(accountId: string): Promise<unknown> {
   };
 }
 
-// Builds + persists the archive under a fresh token. Returns the raw download
-// token (the bearer capability) and the filename.
-export async function createExport(
-  accountId: string,
-): Promise<{ rawToken: string; filename: string }> {
-  const archive = await buildExport(accountId);
-  const token = generateToken();
-  const content = Buffer.from(JSON.stringify(archive, null, 2), 'utf8');
-  const filename = `chatapp-export-${new Date().toISOString().slice(0, 10)}.json`;
-  const expiresAt = new Date(Date.now() + DATA_EXPORT_TTL_MS);
-  await query(
-    `INSERT INTO data_exports (token_hash, account_id, content, filename, expires_at)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [token.hash, accountId, content, filename, expiresAt],
-  );
-  return { rawToken: token.raw, filename };
+// A failing export is retried up to this many times, then marked `failed`.
+export const MAX_EXPORT_ATTEMPTS = 3;
+
+// Durably enqueues an export job (§6). Synchronous — the row is committed before
+// the request returns 200, so a crash can't lose the request. The worker
+// (processPendingExports) fills it in.
+export async function enqueueExport(accountId: string): Promise<void> {
+  await query('INSERT INTO data_exports (account_id) VALUES ($1)', [accountId]);
 }
 
-// Deletes exports whose download window has elapsed (§6 retention). The archive
-// is dead weight (the link no longer works) and holds the user's PII, so it's
-// pruned promptly past expiry. Returns the number of rows removed.
+// The export worker: claims up to `batchSize` pending jobs and generates each.
+// Multi-machine-safe via FOR UPDATE SKIP LOCKED (one machine in v1). Returns the
+// number completed (marked `ready`) this pass.
+export async function processPendingExports(
+  log: FastifyBaseLogger,
+  batchSize = 10,
+): Promise<number> {
+  let completed = 0;
+  for (let i = 0; i < batchSize; i++) {
+    const done = await processOnePending(log);
+    if (done === 'none') break;
+    if (done === 'ready') completed += 1;
+  }
+  return completed;
+}
+
+type JobOutcome = 'none' | 'ready' | 'error';
+
+// Processes a single pending job in its own transaction. The row lock is held
+// only while building the archive (a few SELECTs); the email is sent after commit
+// so we never hold a transaction across network I/O.
+async function processOnePending(log: FastifyBaseLogger): Promise<JobOutcome> {
+  const client = await getPool().connect();
+  let toEmail: { email: string; rawToken: string } | null = null;
+  let outcome: JobOutcome = 'none';
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<{ id: string; account_id: string }>(
+      `SELECT id, account_id FROM data_exports
+        WHERE status = 'pending'
+        ORDER BY created_at
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED`,
+    );
+    const job = rows[0];
+    if (!job) {
+      await client.query('COMMIT');
+      return 'none';
+    }
+    try {
+      const archive = await buildExport(job.account_id);
+      const token = generateToken();
+      const content = Buffer.from(JSON.stringify(archive, null, 2), 'utf8');
+      const filename = `chatapp-export-${new Date().toISOString().slice(0, 10)}.json`;
+      const expiresAt = new Date(Date.now() + DATA_EXPORT_TTL_MS);
+      await client.query(
+        `UPDATE data_exports
+            SET token_hash = $2, content = $3, filename = $4, expires_at = $5,
+                status = 'ready'
+          WHERE id = $1`,
+        [job.id, token.hash, content, filename, expiresAt],
+      );
+      const { rows: er } = await client.query<{ email: string }>(
+        'SELECT email FROM accounts WHERE id = $1',
+        [job.account_id],
+      );
+      await client.query('COMMIT');
+      outcome = 'ready';
+      if (er[0]) toEmail = { email: er[0].email, rawToken: token.raw };
+    } catch (err) {
+      // Generation failed — retry up to MAX_EXPORT_ATTEMPTS, then give up.
+      await client.query(
+        `UPDATE data_exports
+            SET attempts = attempts + 1,
+                last_error = $2,
+                status = CASE WHEN attempts + 1 >= $3 THEN 'failed' ELSE 'pending' END
+          WHERE id = $1`,
+        [job.id, String(err), MAX_EXPORT_ATTEMPTS],
+      );
+      await client.query('COMMIT');
+      log.error({ err, exportId: job.id }, 'data export generation failed');
+      outcome = 'error';
+    }
+  } catch (txErr) {
+    await client.query('ROLLBACK').catch(() => {});
+    log.error({ err: txErr }, 'data export job transaction failed');
+  } finally {
+    client.release();
+  }
+
+  if (toEmail) {
+    try {
+      const { appBaseUrl } = loadConfig();
+      const link = `${appBaseUrl}/auth/export/download?token=${encodeURIComponent(toEmail.rawToken)}`;
+      await sendDataExportEmail(log, toEmail.email, link);
+    } catch (err) {
+      log.error({ err }, 'data export email failed');
+    }
+  }
+  return outcome;
+}
+
+// Deletes finished/dead export rows (§6 retention): a `ready` archive past its
+// download window (dead weight + the user's PII), plus `failed` jobs and
+// `pending` jobs abandoned for over a day. Returns the number of rows removed.
 export async function sweepExpiredDataExports(): Promise<number> {
   const { rowCount } = await query(
-    'DELETE FROM data_exports WHERE expires_at <= now()',
+    `DELETE FROM data_exports
+      WHERE (status = 'ready' AND expires_at <= now())
+         OR status = 'failed'
+         OR (status = 'pending' AND created_at < now() - interval '1 day')`,
   );
   return rowCount ?? 0;
-}
-
-// Fire-and-forget worker: persist the archive and email the download link.
-// Best-effort — logs and swallows errors (the request already returned 200).
-export async function generateExport(
-  log: FastifyBaseLogger,
-  accountId: string,
-  email: string,
-): Promise<void> {
-  try {
-    const { rawToken } = await createExport(accountId);
-    const { appBaseUrl } = loadConfig();
-    const link = `${appBaseUrl}/auth/export/download?token=${encodeURIComponent(rawToken)}`;
-    await sendDataExportEmail(log, email, link);
-  } catch (err) {
-    log.error({ err, accountId }, 'data export generation failed');
-  }
 }
