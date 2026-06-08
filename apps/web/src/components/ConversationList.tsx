@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { ConversationSummary } from '@chatapp/shared';
 import { formatConversationTimestamp } from '../lib/time';
 import { peerName } from '../lib/peer';
+import { Avatar } from './Avatar';
 
 export function ConversationList({
   conversations,
@@ -68,6 +69,7 @@ function ConversationRow({
         to={`/conversations/${conversation.id}`}
         className="conversation-item"
       >
+        <Avatar peer={conversation.peer} />
         <span className="conversation-main">
           <span className="conversation-peer">{name}</span>
           <span className="conversation-preview">
