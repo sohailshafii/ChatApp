@@ -257,7 +257,13 @@ The same primitive also gates **bot invocation**
 **message send** (`src/rate-limit/message-rate-limit.ts`, `MESSAGE_LIMITS`, per
 user): the WS `handleSend` checks it before persisting, and over the cap replies
 `error{code:'rate_limited', clientMessageId}` (socket stays open) and stores
-nothing. Username lookup is still to come.
+nothing. The fourth surface, **username lookup**
+(`src/rate-limit/username-lookup-rate-limit.ts`, `USERNAME_LOOKUP_LIMITS`, per
+caller account **and** per-IP over a 10-min window), gates the human-peer
+resolution in `POST /conversations`: a human peer is addressed by exact username,
+so an unbounded caller could enumerate accounts. The route checks it (human peers
+only — bot ids resolve against the in-process registry, not a lookup) **before**
+the DB hit and over the cap returns **429** `rate_limited`.
 
 **Global caps across the fleet.** The numbers in `AUTH_LIMITS`/`BOT_LIMITS` are
 **global** (whole-fleet) caps per window, not per-machine. Because the counter is
