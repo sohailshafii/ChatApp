@@ -16,8 +16,23 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
+}
+
+/* Full-height app shell: fixed header band + a flexible content area that the
+   messaging panes fill (and that scrolls for ordinary pages). */
+.app-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 a {
@@ -356,8 +371,8 @@ a {
   display: flex;
   align-items: flex-end;
   gap: 0.5rem;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.75rem 1.25rem;
   border-top: 1px solid var(--color-border);
   flex-wrap: wrap;
 }
@@ -433,12 +448,17 @@ a.btn-primary {
 }
 
 .app-main {
-  padding: 1.5rem 1.25rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
+/* Ordinary (non-messaging) pages: centred column with breathing room. The
+   messaging layout opts out — it manages its own full-height panes. */
 .page {
   max-width: 28rem;
   margin: 0 auto;
+  padding: 1.5rem 1.25rem;
 }
 
 .form {
@@ -574,4 +594,177 @@ a.btn-primary {
 .btn-danger:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* ── Two-pane messaging layout (Slack-style) ───────────────────────────────
+   A persistent conversation rail on the left, the active chat in the centre.
+   Fills the content area; each pane scrolls independently. */
+.messaging-layout {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 20rem minmax(0, 1fr);
+}
+
+/* Left rail */
+.conversation-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  background: #f7f8fa;
+  border-right: 1px solid var(--color-border);
+}
+
+.sidebar-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: #f7f8fa;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.compose-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.9rem;
+  height: 1.9rem;
+  font-size: 1.35rem;
+  line-height: 1;
+  color: #fff;
+  background: var(--color-accent);
+  border-radius: 50%;
+  text-decoration: none;
+}
+
+.compose-btn:hover {
+  background: #1f49b6;
+}
+
+.sidebar-note {
+  padding: 0.75rem 1rem;
+  margin: 0;
+}
+
+.conversation-sidebar .conversation-list {
+  margin: 0;
+}
+
+.conversation-row.is-active {
+  background: #e7edfb;
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.conversation-row.is-active:hover {
+  background: #e1e9fa;
+}
+
+/* Centre: active conversation */
+.chat-pane {
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--color-bg);
+}
+
+.chat {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.chat-header h1 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+}
+
+.chat .socket-status {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.4rem 1.25rem;
+  background: #fff7e6;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Back arrow: only needed when the rail is hidden (narrow screens). */
+.back-link {
+  display: none;
+}
+
+/* Empty centre pane (no conversation selected) */
+.chat-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.chat-empty-emoji {
+  margin: 0;
+  font-size: 2.5rem;
+}
+
+.chat-empty-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.chat-empty-sub {
+  margin: 0;
+}
+
+/* Single-pane on narrow screens: the rail at `/`, the chat once one is open. */
+@media (max-width: 720px) {
+  .messaging-layout {
+    grid-template-columns: 1fr;
+  }
+  .messaging-layout .chat-pane {
+    display: none;
+  }
+  .messaging-layout.has-active-chat .conversation-sidebar {
+    display: none;
+  }
+  .messaging-layout.has-active-chat .chat-pane {
+    display: block;
+  }
+  .back-link {
+    display: inline-flex;
+    font-size: 1.4rem;
+    line-height: 1;
+    text-decoration: none;
+    color: var(--color-accent);
+  }
 }

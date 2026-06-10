@@ -1,7 +1,8 @@
 import { Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { MessagingLayout } from './components/MessagingLayout';
 import { RequireAuth, RedirectIfAuthed } from './auth/guards';
-import { HomePage } from './pages/HomePage';
+import { ChatEmptyState } from './pages/ChatEmptyState';
 import { SignupPage } from './pages/SignupPage';
 import { LoginPage } from './pages/LoginPage';
 import { ConversationPage } from './pages/ConversationPage';
@@ -19,9 +20,12 @@ export function App() {
       <Route element={<Layout />}>
         {/* Requires a session. */}
         <Route element={<RequireAuth />}>
-          <Route index element={<HomePage />} />
-          <Route path="conversations/new" element={<NewConversationPage />} />
-          <Route path="conversations/:id" element={<ConversationPage />} />
+          {/* Two-pane messaging: persistent rail + active conversation. */}
+          <Route element={<MessagingLayout />}>
+            <Route index element={<ChatEmptyState />} />
+            <Route path="conversations/new" element={<NewConversationPage />} />
+            <Route path="conversations/:id" element={<ConversationPage />} />
+          </Route>
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 
