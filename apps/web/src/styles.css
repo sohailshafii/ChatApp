@@ -258,6 +258,13 @@ input[type='checkbox'] {
   object-fit: cover;
 }
 
+/* Human peers: a monogram on a per-user color (background set inline). */
+.avatar-monogram {
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
 .conversation-hide {
   flex-shrink: 0;
   width: 2.5rem;
@@ -277,6 +284,19 @@ input[type='checkbox'] {
 
 .conversation-hide:disabled {
   cursor: default;
+}
+
+/* Where hover is available, keep rows uncluttered: reveal the hide button on
+   row hover or keyboard focus. On touch (no hover), it stays visible. */
+@media (hover: hover) {
+  .conversation-hide {
+    opacity: 0;
+    transition: opacity 0.12s ease, color 0.12s ease;
+  }
+  .conversation-row:hover .conversation-hide,
+  .conversation-row:focus-within .conversation-hide {
+    opacity: 1;
+  }
 }
 
 .conversation-main {
@@ -373,11 +393,33 @@ input[type='checkbox'] {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
 }
 
 .message-row {
   display: flex;
+  margin-top: 2px; /* tight within a same-sender run */
+}
+
+/* First message of a new sender-run or day: breathe a little. */
+.message-row.is-group-start {
+  margin-top: 0.55rem;
+}
+
+/* Date divider between day buckets. */
+.message-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.85rem 0 0.35rem;
+}
+
+.message-divider span {
+  padding: 0.15rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  border-radius: var(--radius-pill);
 }
 
 .message-row.is-own {
@@ -440,6 +482,44 @@ input[type='checkbox'] {
 @keyframes blink {
   50% {
     opacity: 0;
+  }
+}
+
+/* "Typing" indicator: three dots bouncing in sequence while a bot reply streams
+   but has no text yet. */
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0;
+}
+
+.typing-dots span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-0.25rem);
+    opacity: 1;
   }
 }
 
@@ -552,6 +632,40 @@ a.btn-primary {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* Subtle, theme-aware scrollbars for the scrolling panes. */
+.app-main,
+.conversation-sidebar,
+.chat-pane,
+.chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.app-main::-webkit-scrollbar,
+.conversation-sidebar::-webkit-scrollbar,
+.chat-pane::-webkit-scrollbar,
+.chat-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.app-main::-webkit-scrollbar-thumb,
+.conversation-sidebar::-webkit-scrollbar-thumb,
+.chat-pane::-webkit-scrollbar-thumb,
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background-clip: content-box;
+}
+
+.app-main::-webkit-scrollbar-track,
+.conversation-sidebar::-webkit-scrollbar-track,
+.chat-pane::-webkit-scrollbar-track,
+.chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Ordinary (non-messaging) pages: centred column with breathing room. The

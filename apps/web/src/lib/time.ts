@@ -32,3 +32,31 @@ export function formatConversationTimestamp(iso: string, now: Date = new Date())
     ? label
     : `${label}, ${d.getFullYear()}`;
 }
+
+// Stable local-day key for grouping messages into day buckets.
+export function dayKey(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+// Label for a date divider in a conversation:
+//  - today / yesterday -> "Today" / "Yesterday"
+//  - older this year   -> "Mon, Jun 2"
+//  - older other year  -> "Jun 2, 2025"
+export function formatDayLabel(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+
+  const startOfDay = (x: Date) =>
+    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dayDiff = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
+
+  if (dayDiff <= 0) return 'Today';
+  if (dayDiff === 1) return 'Yesterday';
+
+  const md = `${MONTHS[d.getMonth()]!} ${d.getDate()}`;
+  return d.getFullYear() === now.getFullYear()
+    ? `${WEEKDAYS[d.getDay()]!}, ${md}`
+    : `${md}, ${d.getFullYear()}`;
+}

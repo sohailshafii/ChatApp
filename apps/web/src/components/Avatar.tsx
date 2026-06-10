@@ -1,11 +1,12 @@
 import type { ConversationPeer } from '@chatapp/shared';
 import { customAvatar } from '../avatars/registry';
+import { avatarColor, monogram } from '../lib/avatarColor';
 
-// Avatar for a conversation peer (§2). Resolves an image in priority order:
+// Avatar for a conversation peer (§2). Resolves in priority order:
 //   1. an explicit `imageUrl` (future per-user avatar URL),
 //   2. a bundled custom image registered for the peer (src/avatars/registry),
-//   3. otherwise an emoji derived from the peer — a face for humans, a per-bot
-//      glyph for bots (Grik gets a lizard).
+//   3. for a human, a monogram on a color derived from their username,
+//   4. otherwise an emoji — a per-bot glyph for bots (Grik gets a lizard).
 
 const HUMAN_EMOJI = '🙂';
 const DEFAULT_BOT_EMOJI = '🤖';
@@ -31,6 +32,17 @@ export function Avatar({
   const src = imageUrl ?? customAvatar(peer);
   if (src) {
     return <img className="avatar avatar-image" src={src} alt="" aria-hidden="true" />;
+  }
+  if (peer.kind === 'human') {
+    return (
+      <span
+        className="avatar avatar-monogram"
+        aria-hidden="true"
+        style={{ background: avatarColor(peer.username) }}
+      >
+        {monogram(peer.username)}
+      </span>
+    );
   }
   return (
     <span className="avatar avatar-emoji" aria-hidden="true">
