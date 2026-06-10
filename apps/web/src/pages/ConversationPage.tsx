@@ -46,6 +46,9 @@ export function ConversationPage() {
   // messages) shouldn't be interrupted.
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  // Scroll height captured just before older messages are prepended, so we can
+  // restore the viewport position afterwards (paging in history shouldn't jump).
+  const prependHeightRef = useRef<number | null>(null);
 
   // Show a "jump to latest" affordance when scrolled up; flag when something new
   // arrived below the fold so the pill reads "New messages".
@@ -87,7 +90,15 @@ export function ConversationPage() {
   // follow to the bottom when pinned. useLayoutEffect avoids a visible jump.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && stickToBottom.current) {
+    if (!el) return;
+    if (prependHeightRef.current !== null) {
+      // Older messages were just prepended — keep the viewport where it was by
+      // adding the height that appeared above.
+      el.scrollTop += el.scrollHeight - prependHeightRef.current;
+      prependHeightRef.current = null;
+      return;
+    }
+    if (stickToBottom.current) {
       el.scrollTop = el.scrollHeight;
     }
   }, [messages]);
@@ -146,9 +157,12 @@ export function ConversationPage() {
     setLoadingOlder(true);
     try {
       const page = await getMessages(id, { before: nextBefore, limit: PAGE_SIZE });
+      // Capture height before the DOM grows so the layout effect can restore it.
+      prependHeightRef.current = scrollRef.current?.scrollHeight ?? null;
       dispatch({ type: 'prepend', messages: page.messages });
       setNextBefore(page.nextBefore);
     } catch {
+      prependHeightRef.current = null;
       // Leave loaded history in place; the user can retry.
     } finally {
       setLoadingOlder(false);

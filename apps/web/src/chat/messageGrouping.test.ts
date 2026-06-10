@@ -4,8 +4,8 @@ import type { DisplayMessage } from './messageReducer';
 
 const NOW = new Date(2026, 5, 9, 12, 0); // Jun 9 2026, local
 
-function iso(y: number, mo: number, d: number, h = 10): string {
-  return new Date(y, mo, d, h, 0).toISOString();
+function iso(y: number, mo: number, d: number, h = 10, mi = 0): string {
+  return new Date(y, mo, d, h, mi).toISOString();
 }
 
 function msg(
@@ -29,12 +29,12 @@ describe('buildMessageRows', () => {
     expect(rows[1]).toMatchObject({ kind: 'message', startsGroup: true });
   });
 
-  it('groups consecutive same-sender messages (only the first starts a group)', () => {
+  it('groups consecutive same-sender messages close in time (only the first starts a group)', () => {
     const rows = buildMessageRows(
       [
-        msg({ key: 'a', senderId: 'u1', createdAt: iso(2026, 5, 9, 10) }),
-        msg({ key: 'b', senderId: 'u1', createdAt: iso(2026, 5, 9, 11) }),
-        msg({ key: 'c', senderId: 'u2', createdAt: iso(2026, 5, 9, 12) }),
+        msg({ key: 'a', senderId: 'u1', createdAt: iso(2026, 5, 9, 10, 0) }),
+        msg({ key: 'b', senderId: 'u1', createdAt: iso(2026, 5, 9, 10, 2) }),
+        msg({ key: 'c', senderId: 'u2', createdAt: iso(2026, 5, 9, 10, 3) }),
       ],
       NOW,
     );
@@ -43,6 +43,18 @@ describe('buildMessageRows', () => {
     expect(rows[1]).toMatchObject({ key: 'a', startsGroup: true });
     expect(rows[2]).toMatchObject({ key: 'b', startsGroup: false });
     expect(rows[3]).toMatchObject({ key: 'c', startsGroup: true });
+  });
+
+  it('starts a new group after a long pause, even for the same sender', () => {
+    const rows = buildMessageRows(
+      [
+        msg({ key: 'a', senderId: 'u1', createdAt: iso(2026, 5, 9, 10, 0) }),
+        msg({ key: 'b', senderId: 'u1', createdAt: iso(2026, 5, 9, 10, 10) }), // +10 min
+      ],
+      NOW,
+    );
+    expect(rows[1]).toMatchObject({ key: 'a', startsGroup: true });
+    expect(rows[2]).toMatchObject({ key: 'b', startsGroup: true });
   });
 
   it('starts a new day with a divider and a fresh group even for the same sender', () => {
