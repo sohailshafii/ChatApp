@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatConversationTimestamp } from './time';
+import { dayKey, formatConversationTimestamp, formatDayLabel } from './time';
 
 // Fixed reference "now": Mon Jun 15 2026, 12:00 local.
 const now = new Date(2026, 5, 15, 12, 0, 0);
@@ -36,5 +36,31 @@ describe('formatConversationTimestamp', () => {
 
   it('returns an empty string for an unparseable timestamp', () => {
     expect(formatConversationTimestamp('not-a-date', now)).toBe('');
+  });
+});
+
+describe('dayKey', () => {
+  it('is stable across times on the same local day', () => {
+    expect(dayKey(localIso(2026, 5, 15, 1))).toBe(dayKey(localIso(2026, 5, 15, 23)));
+  });
+
+  it('differs across days', () => {
+    expect(dayKey(localIso(2026, 5, 15))).not.toBe(dayKey(localIso(2026, 5, 14)));
+  });
+});
+
+describe('formatDayLabel', () => {
+  it('labels today and yesterday', () => {
+    expect(formatDayLabel(localIso(2026, 5, 15, 9), now)).toBe('Today');
+    expect(formatDayLabel(localIso(2026, 5, 14, 9), now)).toBe('Yesterday');
+  });
+
+  it('uses weekday + month/day earlier in the same year', () => {
+    // Jun 2 2026 is a Tuesday.
+    expect(formatDayLabel(localIso(2026, 5, 2, 10), now)).toBe('Tue, Jun 2');
+  });
+
+  it('includes the year for a different year', () => {
+    expect(formatDayLabel(localIso(2024, 5, 2, 10), now)).toBe('Jun 2, 2024');
   });
 });
