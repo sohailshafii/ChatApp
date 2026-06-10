@@ -21,6 +21,13 @@ import {
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+// All REST endpoints are served under this base (issue #75 / server PR #79):
+// `/api/*` is the backend and everything else is the SPA, so client routes and
+// API paths no longer collide on hard reload / deep link. In dev the Vite proxy
+// forwards `/api` to the server; in prod it's same-origin. Callers pass paths
+// without the prefix (e.g. '/auth/me').
+const API_BASE = '/api';
+
 /** Codes that can originate on the client, in addition to the server's ErrorCode set. */
 export type ClientErrorCode = 'network_error' | 'malformed_response';
 
@@ -74,7 +81,7 @@ export async function apiFetch<T = unknown>(
 
   let res: Response;
   try {
-    res = await fetch(path, {
+    res = await fetch(`${API_BASE}${path}`, {
       method,
       headers,
       credentials: 'same-origin',
