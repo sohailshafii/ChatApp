@@ -24,8 +24,30 @@ export function Layout() {
     }
     const main = mainRef.current;
     main?.focus();
-    const heading = main?.querySelector('h1')?.textContent?.trim();
-    setRouteAnnouncement(heading || document.title);
+    const readHeading = () => main?.querySelector('h1')?.textContent?.trim() ?? '';
+
+    // If the new view's heading is already mounted, announce it. Otherwise the
+    // page is loading behind a skeleton (e.g. a conversation): watch for the
+    // heading to appear and announce it then, falling back to the document
+    // title if it never does.
+    const initial = readHeading();
+    if (initial || !main) {
+      setRouteAnnouncement(initial || document.title);
+      return;
+    }
+    let settled = false;
+    const announce = (text: string) => {
+      if (settled || !text) return;
+      settled = true;
+      setRouteAnnouncement(text);
+    };
+    const observer = new MutationObserver(() => announce(readHeading()));
+    observer.observe(main, { childList: true, subtree: true });
+    const timer = window.setTimeout(() => announce(document.title), 4000);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
   }, [pathname]);
 
   async function handleLogout() {
