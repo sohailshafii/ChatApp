@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { ConversationSummary } from '@chatapp/shared';
 import { useAuth } from '../auth/AuthContext';
@@ -36,6 +36,37 @@ export function ConversationPage() {
   const [messages, dispatch] = useReducer(messageReducer, []);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+
+  // Whether the viewport is pinned to the latest message. The window is the
+  // scroll container (the composer sits in normal flow at page bottom), so new
+  // messages and streaming bot chunks grow the page below the fold. We follow
+  // them only when the user is already near the bottom — scrolling up to read
+  // history (or paging in older messages) shouldn't be interrupted.
+  const stickToBottom = useRef(true);
+
+  // Track whether the user is near the bottom as they scroll the window.
+  useEffect(() => {
+    function onScroll() {
+      const doc = document.documentElement;
+      const distanceFromBottom = doc.scrollHeight - (window.scrollY + window.innerHeight);
+      stickToBottom.current = distanceFromBottom < 120;
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Switching conversations should open at the latest message.
+  useEffect(() => {
+    stickToBottom.current = true;
+  }, [id]);
+
+  // After messages render (initial load, send, incoming, streaming chunk),
+  // follow to the bottom when pinned. useLayoutEffect avoids a visible jump.
+  useLayoutEffect(() => {
+    if (stickToBottom.current) {
+      window.scrollTo({ top: document.documentElement.scrollHeight });
+    }
+  }, [messages]);
 
   // Load metadata + the latest history page, and mark read.
   useEffect(() => {
