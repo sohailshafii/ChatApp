@@ -7,16 +7,19 @@ import { Avatar } from './Avatar';
 
 export function ConversationList({
   conversations,
+  activeId = null,
   onHide,
 }: {
   conversations: ConversationSummary[];
+  // The conversation currently open in the center pane, highlighted in the list.
+  activeId?: string | null;
   // Hide a conversation from the list (§2). Throws on failure so the row can
   // recover; the parent restores the row and surfaces the error.
   onHide: (id: string) => Promise<void>;
 }) {
   if (conversations.length === 0) {
     return (
-      <p className="empty">
+      <p className="empty sidebar-note">
         No conversations yet. New messages will show up here.
       </p>
     );
@@ -26,7 +29,11 @@ export function ConversationList({
     <ul className="conversation-list">
       {conversations.map((c) => (
         <li key={c.id}>
-          <ConversationRow conversation={c} onHide={onHide} />
+          <ConversationRow
+            conversation={c}
+            active={c.id === activeId}
+            onHide={onHide}
+          />
         </li>
       ))}
     </ul>
@@ -35,9 +42,11 @@ export function ConversationList({
 
 function ConversationRow({
   conversation,
+  active,
   onHide,
 }: {
   conversation: ConversationSummary;
+  active: boolean;
   onHide: (id: string) => Promise<void>;
 }) {
   const name = peerName(conversation.peer);
@@ -64,10 +73,15 @@ function ConversationRow({
   }
 
   return (
-    <div className={`conversation-row${hasUnread ? ' is-unread' : ''}`}>
+    <div
+      className={`conversation-row${hasUnread ? ' is-unread' : ''}${
+        active ? ' is-active' : ''
+      }`}
+    >
       <Link
         to={`/conversations/${conversation.id}`}
         className="conversation-item"
+        aria-current={active ? 'page' : undefined}
       >
         <Avatar peer={conversation.peer} />
         <span className="conversation-main">

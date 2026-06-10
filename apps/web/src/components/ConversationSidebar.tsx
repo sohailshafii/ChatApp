@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useMatch } from 'react-router-dom';
 import type { ConversationSummary } from '@chatapp/shared';
 import { hideConversation, listConversations } from '../api/conversations';
 import { useChatSocket } from '../chat/ChatSocketProvider';
@@ -7,17 +7,23 @@ import {
   applyFrameToConversations,
   frameTargetsUnknownConversation,
 } from '../chat/conversationListUpdate';
-import { ConversationList } from '../components/ConversationList';
+import { ConversationList } from './ConversationList';
 
-// Authenticated home: the conversation list (§2). Loaded over REST, then kept
-// live from the WebSocket while on screen — new messages refresh the preview,
-// bump the conversation up, and raise its unread count without a reload.
+// Left rail (Slack-style): the conversation list (§2) plus a compose button.
+// Stays mounted across center-pane route changes, so opening a chat no longer
+// unmounts/refetches the list — it's kept live from the WebSocket while shown.
 type Status = 'loading' | 'error' | 'ready';
 
-export function HomePage() {
+export function ConversationSidebar() {
   const { subscribe } = useChatSocket();
   const [status, setStatus] = useState<Status>('loading');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+
+  // The currently open conversation, so we can highlight it and clear its badge.
+  // `/conversations/:id` also matches `/conversations/new`, so exclude that.
+  const match = useMatch('/conversations/:id');
+  const activeId =
+    match && match.params.id !== 'new' ? (match.params.id ?? null) : null;
 
   // Latest list, for the socket handler to check membership without re-subscribing.
   const listRef = useRef<ConversationSummary[]>(conversations);
@@ -36,6 +42,17 @@ export function HomePage() {
       active = false;
     };
   }, []);
+
+  // Opening a conversation marks it read on the server (ConversationPage); clear
+  // its unread badge here too so the rail reflects that immediately.
+  useEffect(() => {
+    if (!activeId) return;
+    setConversations((prev) =>
+      prev.some((c) => c.id === activeId && c.unreadCount > 0)
+        ? prev.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c))
+        : prev,
+    );
+  }, [activeId]);
 
   // Refetch the whole list (the server is the source of truth) when a live frame
   // arrives for a conversation we can't render from the frame alone. Guarded so
@@ -91,27 +108,36 @@ export function HomePage() {
   }, []);
 
   return (
-    <section className="page" aria-labelledby="chats-heading">
-      <div className="page-head">
-        <h1 id="chats-heading">Chats</h1>
-        <Link to="/conversations/new" className="btn-primary">
-          New
+    <nav className="conversation-sidebar" aria-label="Conversations">
+      <div className="sidebar-head">
+        <h2 id="chats-heading">Chats</h2>
+        <Link
+          to="/conversations/new"
+          className="compose-btn"
+          aria-label="New conversation"
+          title="New conversation"
+        >
+          <span aria-hidden="true">+</span>
         </Link>
       </div>
 
       {status === 'loading' && (
-        <p className="loading" role="status">
+        <p className="loading sidebar-note" role="status">
           Loading your conversations…
         </p>
       )}
       {status === 'error' && (
-        <p className="form-error" role="alert">
+        <p className="form-error sidebar-note" role="alert">
           Couldn’t load your conversations. Please refresh to try again.
         </p>
       )}
       {status === 'ready' && (
-        <ConversationList conversations={conversations} onHide={handleHide} />
+        <ConversationList
+          conversations={conversations}
+          activeId={activeId}
+          onHide={handleHide}
+        />
       )}
-    </section>
+    </nav>
   );
 }

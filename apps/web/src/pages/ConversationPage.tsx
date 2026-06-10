@@ -37,22 +37,19 @@ export function ConversationPage() {
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
 
-  // Whether the viewport is pinned to the latest message. The window is the
-  // scroll container (the composer sits in normal flow at page bottom), so new
-  // messages and streaming bot chunks grow the page below the fold. We follow
-  // them only when the user is already near the bottom — scrolling up to read
-  // history (or paging in older messages) shouldn't be interrupted.
+  // Whether the message pane is pinned to the latest message. The pane scrolls
+  // internally (header and composer stay put), so new messages and streaming
+  // bot chunks grow it below the fold. We follow them only when the user is
+  // already near the bottom — scrolling up to read history (or paging in older
+  // messages) shouldn't be interrupted.
+  const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
-  // Track whether the user is near the bottom as they scroll the window.
-  useEffect(() => {
-    function onScroll() {
-      const doc = document.documentElement;
-      const distanceFromBottom = doc.scrollHeight - (window.scrollY + window.innerHeight);
-      stickToBottom.current = distanceFromBottom < 120;
-    }
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+  // Track whether the user is near the bottom as they scroll the message pane.
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   }, []);
 
   // Switching conversations should open at the latest message.
@@ -63,8 +60,9 @@ export function ConversationPage() {
   // After messages render (initial load, send, incoming, streaming chunk),
   // follow to the bottom when pinned. useLayoutEffect avoids a visible jump.
   useLayoutEffect(() => {
-    if (stickToBottom.current) {
-      window.scrollTo({ top: document.documentElement.scrollHeight });
+    const el = scrollRef.current;
+    if (el && stickToBottom.current) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [messages]);
 
@@ -185,8 +183,8 @@ export function ConversationPage() {
   const name = peerName(load.conversation.peer);
 
   return (
-    <section className="page conversation" aria-labelledby="conversation-heading">
-      <header className="conversation-header">
+    <section className="chat" aria-labelledby="conversation-heading">
+      <header className="chat-header">
         <Link to="/" className="back-link" aria-label="Back to chats">
           ←
         </Link>
@@ -208,22 +206,24 @@ export function ConversationPage() {
         </p>
       )}
 
-      {nextBefore && (
-        <button
-          type="button"
-          className="btn-link load-older"
-          onClick={loadOlder}
-          disabled={loadingOlder}
-        >
-          {loadingOlder ? 'Loading…' : 'Load earlier messages'}
-        </button>
-      )}
+      <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
+        {nextBefore && (
+          <button
+            type="button"
+            className="btn-link load-older"
+            onClick={loadOlder}
+            disabled={loadingOlder}
+          >
+            {loadingOlder ? 'Loading…' : 'Load earlier messages'}
+          </button>
+        )}
 
-      {messages.length === 0 ? (
-        <p className="empty">No messages yet. Say hello.</p>
-      ) : (
-        <MessageList messages={messages} ownId={user?.id ?? ''} peerLabel={name} />
-      )}
+        {messages.length === 0 ? (
+          <p className="empty">No messages yet. Say hello.</p>
+        ) : (
+          <MessageList messages={messages} ownId={user?.id ?? ''} peerLabel={name} />
+        )}
+      </div>
 
       <Composer onSend={handleSend} disabled={socketStatus !== 'open'} />
     </section>
