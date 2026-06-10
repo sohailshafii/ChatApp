@@ -13,6 +13,7 @@ import {
 import { MessageList } from '../components/MessageList';
 import { Composer } from '../components/Composer';
 import { Avatar } from '../components/Avatar';
+import { ConversationSkeleton } from '../components/Skeletons';
 import { peerName } from '../lib/peer';
 
 const PAGE_SIZE = 50;
@@ -163,10 +164,8 @@ export function ConversationPage() {
 
   if (load.status === 'loading') {
     return (
-      <section className="page conversation">
-        <p className="loading" role="status">
-          Loading conversation…
-        </p>
+      <section className="chat">
+        <ConversationSkeleton />
       </section>
     );
   }

@@ -1,6 +1,8 @@
 :root {
-  /* Make native controls (checkboxes, scrollbars, etc.) follow the theme. */
-  color-scheme: light dark;
+  /* Active theme is driven by data-theme on <html> (set before paint by an
+     inline script in index.html, then kept in sync by ThemeToggle). 'system'
+     resolves to light/dark from the OS preference. */
+  color-scheme: light;
 
   /* Brand / accent */
   --accent: #5b5bd6;
@@ -48,11 +50,12 @@
   background: var(--surface);
 }
 
-/* Dark theme — follows the OS setting. Only the tokens change; every rule
-   below is written against them, so the whole app re-themes from here. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --accent: #5b5bd6;
+/* Dark theme. Applied when <html data-theme="dark"> (a manual choice, or
+   'system' resolved against the OS). Only the tokens change; every rule below
+   is written against them, so the whole app re-themes from here. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --accent: #5b5bd6;
     --accent-strong: #6f6ee6;
     --accent-soft: #21223a;
     --link: #a9a9f6;
@@ -74,10 +77,9 @@
     --warning-soft: #342910;
     --peer-bubble: #262834;
 
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
-  }
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -161,6 +163,26 @@ input[type='checkbox'] {
 
 .app-user {
   font-weight: 600;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.05rem;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 /* Contextual notification prompt (§5) */
@@ -1053,6 +1075,112 @@ a.btn-primary {
     text-decoration: none;
     color: var(--link);
   }
+}
+
+/* ── Loading skeletons ─────────────────────────────────────────────────────
+   Shimmering placeholders shown while data fetches. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-hover);
+  border-radius: var(--radius);
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.18),
+    transparent
+  );
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Sidebar list skeleton — rows of avatar + two text lines. */
+.sidebar-skeleton {
+  padding: 0.4rem;
+}
+
+.skel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem;
+}
+
+.skel-avatar {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+}
+
+.skel-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.skel-line {
+  height: 0.7rem;
+  border-radius: var(--radius-sm);
+}
+
+.skel-line-name {
+  width: 45%;
+}
+
+.skel-line-preview {
+  width: 72%;
+}
+
+/* Conversation skeleton — a header strip and a few alternating bubbles. */
+.chat-skeleton {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chat-skeleton-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-skeleton-bubbles {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem 1.25rem;
+}
+
+.skel-bubble {
+  display: flex;
+}
+
+.skel-bubble.is-own {
+  justify-content: flex-end;
+}
+
+.skel-bubble-body {
+  height: 2.4rem;
+  border-radius: 1.15rem;
 }
 
 /* Respect users who prefer less motion: drop transitions and the caret blink. */

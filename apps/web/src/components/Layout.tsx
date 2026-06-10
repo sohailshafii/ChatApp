@@ -1,6 +1,7 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { NotificationPrompt } from '../notifications/NotificationPrompt';
+import { ThemeToggle } from '../theme/ThemeToggle';
 
 // App shell: a header band plus the routed page content. The header carries
 // the account controls (username + log out, or a log in link) once auth resolves.
@@ -23,6 +24,7 @@ export function Layout() {
           ChatApp
         </Link>
         <nav className="app-nav" aria-label="Account">
+          <ThemeToggle />
           {status === 'authenticated' && user && (
             <>
               <span className="app-user">{user.username}</span>

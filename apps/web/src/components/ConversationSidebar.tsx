@@ -8,6 +8,7 @@ import {
   frameTargetsUnknownConversation,
 } from '../chat/conversationListUpdate';
 import { ConversationList } from './ConversationList';
+import { ConversationListSkeleton } from './Skeletons';
 
 // Left rail (Slack-style): the conversation list (§2) plus a compose button.
 // Stays mounted across center-pane route changes, so opening a chat no longer
@@ -121,11 +122,7 @@ export function ConversationSidebar() {
         </Link>
       </div>
 
-      {status === 'loading' && (
-        <p className="loading sidebar-note" role="status">
-          Loading your conversations…
-        </p>
-      )}
+      {status === 'loading' && <ConversationListSkeleton />}
       {status === 'error' && (
         <p className="form-error sidebar-note" role="alert">
           Couldn’t load your conversations. Please refresh to try again.
