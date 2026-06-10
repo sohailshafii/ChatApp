@@ -32,7 +32,9 @@ import {
 // produced by the bot-orchestration work (separate PR); a send into a bot
 // conversation is persisted and acked here, without a reply.
 
-const WS_PATH = '/ws';
+// Under the /api namespace like the REST routes (#75), so the whole backend
+// shares one prefix and the SPA owns every other path.
+const WS_PATH = '/api/ws';
 
 const STATUS_TEXT: Record<number, string> = {
   401: 'Unauthorized',

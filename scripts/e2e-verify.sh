@@ -19,7 +19,8 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-BASE=http://localhost:8080
+# REST lives under /api (#75 — the SPA owns the root namespace, the API is /api/*).
+BASE=http://localhost:8080/api
 ORG=http://localhost:5173
 PASS=0
 FAIL=0

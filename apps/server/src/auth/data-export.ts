@@ -199,7 +199,10 @@ async function processOnePending(log: FastifyBaseLogger): Promise<JobOutcome> {
   if (toEmail) {
     try {
       const { appBaseUrl } = loadConfig();
-      const link = `${appBaseUrl}/auth/export/download?token=${encodeURIComponent(toEmail.rawToken)}`;
+      // The download endpoint is the server route GET /api/auth/export/download,
+      // reached same-origin (prod) or via the dev proxy. The API lives under /api
+      // (#75), so the link must carry that prefix.
+      const link = `${appBaseUrl}/api/auth/export/download?token=${encodeURIComponent(toEmail.rawToken)}`;
       await sendDataExportEmail(log, toEmail.email, link);
     } catch (err) {
       log.error({ err }, 'data export email failed');

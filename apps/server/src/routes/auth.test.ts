@@ -56,7 +56,7 @@ function signup(
 ): Promise<InjectResponse> {
   return app.inject({
     method: 'POST',
-    url: '/auth/signup',
+    url: '/api/auth/signup',
     payload: { username, email, password: PASSWORD },
   });
 }
@@ -73,7 +73,7 @@ async function createVerifiedUser(username = 'alice'): Promise<void> {
 async function login(username = 'alice') {
   const res = await app.inject({
     method: 'POST',
-    url: '/auth/login',
+    url: '/api/auth/login',
     payload: { username, password: PASSWORD },
   });
   expect(res.statusCode).toBe(200);
@@ -116,7 +116,7 @@ describe('POST /auth/login', () => {
     await signup();
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { username: 'alice', password: PASSWORD },
     });
     expect(res.statusCode).toBe(403);
@@ -127,7 +127,7 @@ describe('POST /auth/login', () => {
     await createVerifiedUser();
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { username: 'alice', password: 'nope nope nope' },
     });
     expect(res.statusCode).toBe(401);
@@ -137,7 +137,7 @@ describe('POST /auth/login', () => {
   it('rejects an unknown username with the same generic 401', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { username: 'ghost', password: PASSWORD },
     });
     expect(res.statusCode).toBe(401);
@@ -173,7 +173,7 @@ describe('GET /auth/me', () => {
     const { cookie } = await login();
     const res = await app.inject({
       method: 'GET',
-      url: '/auth/me',
+      url: '/api/auth/me',
       headers: { cookie },
     });
     expect(res.statusCode).toBe(200);
@@ -181,7 +181,7 @@ describe('GET /auth/me', () => {
   });
 
   it('returns 401 without a session cookie', async () => {
-    const res = await app.inject({ method: 'GET', url: '/auth/me' });
+    const res = await app.inject({ method: 'GET', url: '/api/auth/me' });
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe('unauthorized');
   });
@@ -193,7 +193,7 @@ describe('POST /auth/logout', () => {
     const { cookie } = await login();
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/logout',
+      url: '/api/auth/logout',
       headers: { cookie }, // no X-CSRF-Token header
     });
     expect(res.statusCode).toBe(403);
@@ -206,7 +206,7 @@ describe('POST /auth/logout', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/logout',
+      url: '/api/auth/logout',
       headers: { cookie, [CSRF_HEADER_NAME]: csrf },
     });
     expect(res.statusCode).toBe(204);
@@ -219,7 +219,7 @@ describe('POST /auth/logout', () => {
 
     const me = await app.inject({
       method: 'GET',
-      url: '/auth/me',
+      url: '/api/auth/me',
       headers: { cookie },
     });
     expect(me.statusCode).toBe(401);
@@ -262,7 +262,7 @@ describe('DELETE /auth/account (§6)', () => {
   const del = (cookie: string, csrf: string, password: string) =>
     app.inject({
       method: 'DELETE',
-      url: '/auth/account',
+      url: '/api/auth/account',
       headers: { cookie, [CSRF_HEADER_NAME]: csrf },
       payload: { password },
     });
@@ -272,7 +272,7 @@ describe('DELETE /auth/account (§6)', () => {
     const { cookie } = await login();
     const res = await app.inject({
       method: 'DELETE',
-      url: '/auth/account',
+      url: '/api/auth/account',
       headers: { cookie }, // no X-CSRF-Token
       payload: { password: PASSWORD },
     });
@@ -309,7 +309,7 @@ describe('DELETE /auth/account (§6)', () => {
     expect(
       (await query<{ n: number }>('SELECT count(*)::int AS n FROM accounts WHERE id = $1', [aliceId])).rows[0]!.n,
     ).toBe(0);
-    const me = await app.inject({ method: 'GET', url: '/auth/me', headers: { cookie } });
+    const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
     expect(me.statusCode).toBe(401);
 
     // Bot conversation hard-deleted (messages cascade); human conversation and
@@ -350,7 +350,7 @@ describe('DELETE /auth/account (§6)', () => {
     const bob = await login('bob');
     const list = await app.inject({
       method: 'GET',
-      url: '/conversations',
+      url: '/api/conversations',
       headers: { cookie: bob.cookie },
     });
     expect(list.statusCode).toBe(200);
@@ -407,7 +407,7 @@ describe('POST /auth/verify-email', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/verify-email',
+      url: '/api/auth/verify-email',
       payload: { token: raw },
     });
     expect(res.statusCode).toBe(200);
@@ -422,7 +422,7 @@ describe('POST /auth/verify-email', () => {
 
     const loginRes = await app.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { username: 'alice', password: PASSWORD },
     });
     expect(loginRes.statusCode).toBe(200);
@@ -431,7 +431,7 @@ describe('POST /auth/verify-email', () => {
   it('rejects a malformed token with validation_error', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/verify-email',
+      url: '/api/auth/verify-email',
       payload: { token: 'short' },
     });
     expect(res.statusCode).toBe(400);
@@ -441,7 +441,7 @@ describe('POST /auth/verify-email', () => {
   it('rejects a well-formed but unknown token with 400 invalid_token', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/verify-email',
+      url: '/api/auth/verify-email',
       payload: { token: generateToken().raw },
     });
     expect(res.statusCode).toBe(400);
@@ -456,7 +456,7 @@ describe('POST /auth/verify-email', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/verify-email',
+      url: '/api/auth/verify-email',
       payload: { token: raw },
     });
     expect(res.statusCode).toBe(410);
@@ -483,7 +483,7 @@ describe('POST /auth/verify-email/resend', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/verify-email/resend',
+      url: '/api/auth/verify-email/resend',
       payload: { email: 'alice@example.com' },
     });
     expect(res.statusCode).toBe(200);
@@ -500,7 +500,7 @@ describe('POST /auth/verify-email/resend', () => {
   it('returns a generic 200 for an unknown email and creates nothing', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/verify-email/resend',
+      url: '/api/auth/verify-email/resend',
       payload: { email: 'nobody@example.com' },
     });
     expect(res.statusCode).toBe(200);
@@ -520,7 +520,7 @@ describe('POST /auth/verify-email/resend', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/verify-email/resend',
+      url: '/api/auth/verify-email/resend',
       payload: { email: 'alice@example.com' },
     });
     expect(res.statusCode).toBe(200);
@@ -556,7 +556,7 @@ describe('POST /auth/password-reset/request', () => {
     const id = await accountIdByUsername();
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/password-reset/request',
+      url: '/api/auth/password-reset/request',
       payload: { identifier: 'alice' },
     });
     expect(res.statusCode).toBe(200);
@@ -568,7 +568,7 @@ describe('POST /auth/password-reset/request', () => {
     const id = await accountIdByUsername();
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/password-reset/request',
+      url: '/api/auth/password-reset/request',
       payload: { identifier: 'alice@example.com' },
     });
     expect(res.statusCode).toBe(200);
@@ -578,7 +578,7 @@ describe('POST /auth/password-reset/request', () => {
   it('returns a generic 200 for an unknown identifier, creating nothing', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/password-reset/request',
+      url: '/api/auth/password-reset/request',
       payload: { identifier: 'ghost' },
     });
     expect(res.statusCode).toBe(200);
@@ -600,7 +600,7 @@ describe('POST /auth/password-reset/confirm', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/password-reset/confirm',
+      url: '/api/auth/password-reset/confirm',
       payload: { token: raw, newPassword: NEW_PASSWORD },
     });
     expect(res.statusCode).toBe(200);
@@ -609,7 +609,7 @@ describe('POST /auth/password-reset/confirm', () => {
     // Log out everywhere: the prior session no longer authenticates.
     const me = await app.inject({
       method: 'GET',
-      url: '/auth/me',
+      url: '/api/auth/me',
       headers: { cookie },
     });
     expect(me.statusCode).toBe(401);
@@ -617,13 +617,13 @@ describe('POST /auth/password-reset/confirm', () => {
     // Old password rejected, new password accepted.
     const oldLogin = await app.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { username: 'alice', password: PASSWORD },
     });
     expect(oldLogin.statusCode).toBe(401);
     const newLogin = await app.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { username: 'alice', password: NEW_PASSWORD },
     });
     expect(newLogin.statusCode).toBe(200);
@@ -632,7 +632,7 @@ describe('POST /auth/password-reset/confirm', () => {
   it('rejects an unknown token with 400 invalid_token', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/password-reset/confirm',
+      url: '/api/auth/password-reset/confirm',
       payload: { token: generateToken().raw, newPassword: NEW_PASSWORD },
     });
     expect(res.statusCode).toBe(400);
@@ -645,7 +645,7 @@ describe('POST /auth/password-reset/confirm', () => {
     const raw = await insertPasswordResetToken(id, { expired: true });
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/password-reset/confirm',
+      url: '/api/auth/password-reset/confirm',
       payload: { token: raw, newPassword: NEW_PASSWORD },
     });
     expect(res.statusCode).toBe(410);
@@ -655,7 +655,7 @@ describe('POST /auth/password-reset/confirm', () => {
   it('rejects a too-short new password with validation_error', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/password-reset/confirm',
+      url: '/api/auth/password-reset/confirm',
       payload: { token: generateToken().raw, newPassword: 'short' },
     });
     expect(res.statusCode).toBe(400);
@@ -683,7 +683,7 @@ describe('auth audit log (§6)', () => {
     const id = await accountIdByUsername();
     await app.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { username: 'alice', password: 'wrong password' },
     });
     expect(await auditRows()).toEqual([
@@ -694,7 +694,7 @@ describe('auth audit log (§6)', () => {
   it('records an unknown-username attempt as login_failure with no account', async () => {
     await app.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { username: 'ghost', password: 'whatever password' },
     });
     expect(await auditRows()).toEqual([
@@ -708,7 +708,7 @@ describe('auth audit log (§6)', () => {
     const raw = await insertPasswordResetToken(id);
     await app.inject({
       method: 'POST',
-      url: '/auth/password-reset/confirm',
+      url: '/api/auth/password-reset/confirm',
       payload: { token: raw, newPassword: 'a brand new passphrase' },
     });
     expect(await auditRows()).toEqual([
@@ -721,7 +721,7 @@ describe('data export (§6)', () => {
   const exportReq = (cookie: string, csrf?: string) =>
     app.inject({
       method: 'POST',
-      url: '/auth/export',
+      url: '/api/auth/export',
       headers: csrf ? { cookie, [CSRF_HEADER_NAME]: csrf } : { cookie },
     });
 
@@ -818,7 +818,7 @@ describe('data export (§6)', () => {
 
     const dl = await app.inject({
       method: 'GET',
-      url: `/auth/export/download?token=${encodeURIComponent(rawToken)}`,
+      url: `/api/auth/export/download?token=${encodeURIComponent(rawToken)}`,
     });
     expect(dl.statusCode).toBe(200);
     expect(dl.headers['content-disposition']).toContain(`filename="${filename}"`);
@@ -836,7 +836,7 @@ describe('data export (§6)', () => {
   it('rejects an unknown download token', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/auth/export/download?token=${generateToken().raw}`,
+      url: `/api/auth/export/download?token=${generateToken().raw}`,
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('invalid_token');
@@ -848,7 +848,7 @@ describe('data export (§6)', () => {
     const { rawToken } = await insertReadyExport(id, { expired: true });
     const res = await app.inject({
       method: 'GET',
-      url: `/auth/export/download?token=${encodeURIComponent(rawToken)}`,
+      url: `/api/auth/export/download?token=${encodeURIComponent(rawToken)}`,
     });
     expect(res.statusCode).toBe(410);
     expect(res.json().error.code).toBe('expired_token');
@@ -859,7 +859,7 @@ describe('auth rate limiting (§6)', () => {
   const resend = (headers?: Record<string, string>) =>
     app.inject({
       method: 'POST',
-      url: '/auth/verify-email/resend',
+      url: '/api/auth/verify-email/resend',
       payload: { email: 'nobody@example.com' },
       ...(headers ? { headers } : {}),
     });
@@ -878,7 +878,7 @@ describe('auth rate limiting (§6)', () => {
     const fromDefault = (n: number) =>
       app.inject({
         method: 'POST',
-        url: '/auth/verify-email/resend',
+        url: '/api/auth/verify-email/resend',
         payload: { email: `u${n}@example.com` },
       });
     for (let i = 0; i <= AUTH_LIMITS.resendPerIp.max; i++) await fromDefault(i);
@@ -887,7 +887,7 @@ describe('auth rate limiting (§6)', () => {
     // A different forwarded IP has its own fresh per-IP window.
     const other = await app.inject({
       method: 'POST',
-      url: '/auth/verify-email/resend',
+      url: '/api/auth/verify-email/resend',
       payload: { email: 'fresh@example.com' },
       headers: { 'x-forwarded-for': '203.0.113.9' },
     });
@@ -898,7 +898,7 @@ describe('auth rate limiting (§6)', () => {
     const attempt = (username: string) =>
       app.inject({
         method: 'POST',
-        url: '/auth/login',
+        url: '/api/auth/login',
         payload: { username, password: 'whatever-password' },
       });
     // freeRetries failures, then one more that engages the lockout — all 401.
@@ -921,7 +921,7 @@ describe('auth rate limiting (§6)', () => {
     for (let i = 0; i < LOGIN_BACKOFF.freeRetries; i++) {
       const bad = await app.inject({
         method: 'POST',
-        url: '/auth/login',
+        url: '/api/auth/login',
         payload: { username: 'alice', password: 'definitely not it' },
       });
       expect(bad.statusCode).toBe(401);
@@ -933,7 +933,7 @@ describe('auth rate limiting (§6)', () => {
     for (let i = 0; i < LOGIN_BACKOFF.freeRetries; i++) {
       const bad = await app.inject({
         method: 'POST',
-        url: '/auth/login',
+        url: '/api/auth/login',
         payload: { username: 'alice', password: 'definitely not it' },
       });
       expect(bad.statusCode).toBe(401);
