@@ -83,6 +83,32 @@ a `fetch` POST to the Resend API — no SDK dep; `setMailSender` is the test sea
 from **`MAIL_FROM`** (default `onboarding@resend.dev`; Resend only accepts a
 sender on a domain verified in your account). Sends are **best-effort** — a
 failure is logged, never thrown, so email never breaks the auth/account flow.
+
+**Testing real email on Fly without owning a domain.** You can exercise the full
+hosted flow with just:
+
+- `APP_BASE_URL=https://<app>.fly.dev` — the Fly app domain. This only builds the
+  *links inside* the emails, so pointing it at the live app is exactly right.
+- `MAIL_FROM=onboarding@resend.dev` — Resend's shared sandbox sender (no domain
+  setup).
+
+With that, sign up using **the email you registered your Resend account with**:
+the mail arrives, its link points at the live Fly app, and you verify end-to-end.
+**It only works for that one address, though** — `onboarding@resend.dev` is a
+sandbox sender Resend restricts to delivering **only to the Resend account
+owner**; any other recipient is rejected (logged as a best-effort send failure,
+signup still succeeds via the no-email path). So it's self-testing, not real
+delivery.
+
+**Why the `.fly.dev` domain can't be the *sending* domain.** Emailing arbitrary
+users needs a domain **verified** with Resend, which means adding SPF/DKIM/DMARC
+DNS records on it. You don't control DNS for `fly.dev` (Fly owns that zone; you
+only get an app subdomain with no way to add those records), so `*.fly.dev` works
+for `APP_BASE_URL` (HTTP) but never for `MAIL_FROM`. Real delivery = a domain you
+own: add Resend's DNS records at your registrar, then set
+`MAIL_FROM=noreply@yourdomain`. (You can also point that domain at Fly as a custom
+domain for HTTP, but the email DNS records live at the registrar either way.)
+
 Inspect the persisted rows directly:
 
 ```bash
