@@ -1,5 +1,5 @@
 import type { ConversationPeer } from '@chatapp/shared';
-import grik from './grik.svg';
+import grik from './grik2.png';
 
 // Bundled custom avatar images (§2), swappable in code — no server involved.
 // To add one: drop an image in src/avatars/, import it here, and map it by peer

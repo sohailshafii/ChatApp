@@ -181,6 +181,7 @@ export function ConversationPage() {
   }
 
   const name = peerName(load.conversation.peer);
+  const isBot = load.conversation.peer.kind === 'bot';
 
   return (
     <section className="chat" aria-labelledby="conversation-heading">
@@ -189,7 +190,18 @@ export function ConversationPage() {
           ←
         </Link>
         <Avatar peer={load.conversation.peer} />
-        <h1 id="conversation-heading">{name}</h1>
+        <div className="chat-title">
+          <h1 id="conversation-heading">
+            {name}
+            {isBot && <span className="bot-tag"> (bot)</span>}
+          </h1>
+          {isBot && (
+            <p className="bot-disclaimer">
+              This is a bot powered by a large language model. It is not a real
+              person and shouldn’t be treated as one.
+            </p>
+          )}
+        </div>
         <button
           type="button"
           className="btn-link hide-conversation"
