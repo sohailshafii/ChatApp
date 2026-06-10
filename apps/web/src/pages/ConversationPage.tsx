@@ -14,6 +14,7 @@ import { MessageList } from '../components/MessageList';
 import { Composer } from '../components/Composer';
 import { Avatar } from '../components/Avatar';
 import { ConversationSkeleton } from '../components/Skeletons';
+import { EmptyState } from '../components/EmptyState';
 import { peerName } from '../lib/peer';
 
 const PAGE_SIZE = 50;
@@ -46,6 +47,11 @@ export function ConversationPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
+  // Show a "jump to latest" affordance when scrolled up; flag when something new
+  // arrived below the fold so the pill reads "New messages".
+  const [showJump, setShowJump] = useState(false);
+  const [hasNew, setHasNew] = useState(false);
+
   // Politely announce incoming peer/bot messages to assistive tech (the visual
   // thread isn't a live region, so screen-reader users wouldn't hear new ones).
   const [announcement, setAnnouncement] = useState('');
@@ -56,12 +62,25 @@ export function ConversationPage() {
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    stickToBottom.current = nearBottom;
+    setShowJump(!nearBottom);
+    if (nearBottom) setHasNew(false);
+  }, []);
+
+  const jumpToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    stickToBottom.current = true;
+    setShowJump(false);
+    setHasNew(false);
   }, []);
 
   // Switching conversations should open at the latest message.
   useEffect(() => {
     stickToBottom.current = true;
+    setShowJump(false);
+    setHasNew(false);
   }, [id]);
 
   // After messages render (initial load, send, incoming, streaming chunk),
@@ -110,10 +129,14 @@ export function ConversationPage() {
       // while viewing. Skip our own echoes; announce the bot reply once complete.
       if (frame.type === 'message' && frame.message.conversationId === id) {
         void markConversationRead(id, frame.message.id).catch(() => {});
-        if (frame.message.senderId !== user?.id) announce(frame.message.content);
+        if (frame.message.senderId !== user?.id) {
+          announce(frame.message.content);
+          if (!stickToBottom.current) setHasNew(true);
+        }
       } else if (frame.type === 'bot_end' && frame.message.conversationId === id) {
         void markConversationRead(id, frame.message.id).catch(() => {});
         announce(frame.message.content);
+        if (!stickToBottom.current) setHasNew(true);
       }
     });
   }, [id, subscribe, user?.id]);
@@ -235,22 +258,38 @@ export function ConversationPage() {
         </p>
       )}
 
-      <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
-        {nextBefore && (
+      <div className="chat-body">
+        <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
+          {nextBefore && (
+            <button
+              type="button"
+              className="btn-link load-older"
+              onClick={loadOlder}
+              disabled={loadingOlder}
+            >
+              {loadingOlder ? 'Loading…' : 'Load earlier messages'}
+            </button>
+          )}
+
+          {messages.length === 0 ? (
+            <EmptyState emoji="👋" title="No messages yet" fill>
+              Say hello to start the conversation.
+            </EmptyState>
+          ) : (
+            <MessageList messages={messages} ownId={user?.id ?? ''} peerLabel={name} />
+          )}
+        </div>
+
+        {showJump && (
           <button
             type="button"
-            className="btn-link load-older"
-            onClick={loadOlder}
-            disabled={loadingOlder}
+            className="scroll-bottom-btn"
+            onClick={jumpToBottom}
+            aria-label="Scroll to latest messages"
           >
-            {loadingOlder ? 'Loading…' : 'Load earlier messages'}
+            <span aria-hidden="true">↓</span>
+            {hasNew ? ' New messages' : ' Latest'}
           </button>
-        )}
-
-        {messages.length === 0 ? (
-          <p className="empty">No messages yet. Say hello.</p>
-        ) : (
-          <MessageList messages={messages} ownId={user?.id ?? ''} peerLabel={name} />
         )}
       </div>
 

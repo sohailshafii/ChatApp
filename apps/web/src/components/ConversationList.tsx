@@ -4,6 +4,7 @@ import type { ConversationSummary } from '@chatapp/shared';
 import { formatConversationTimestamp } from '../lib/time';
 import { peerName } from '../lib/peer';
 import { Avatar } from './Avatar';
+import { EmptyState } from './EmptyState';
 
 export function ConversationList({
   conversations,
@@ -19,9 +20,9 @@ export function ConversationList({
 }) {
   if (conversations.length === 0) {
     return (
-      <p className="empty sidebar-note">
-        No conversations yet. New messages will show up here.
-      </p>
+      <EmptyState emoji="📭" title="No conversations yet">
+        Start one with the + above — new messages show up here.
+      </EmptyState>
     );
   }
 
