@@ -20,6 +20,10 @@ const envSchema = z.object({
 
   // Optional in dev: when unset, verification emails are logged instead of sent.
   RESEND_API_KEY: z.string().optional(),
+  // The From address on outgoing mail. Resend only accepts a sender on a domain
+  // verified in your account; the default works out-of-the-box for testing
+  // (Resend delivers it to the account owner). Accepts "Name <email>" too.
+  MAIL_FROM: z.string().min(1).default('onboarding@resend.dev'),
 
   // Bot reply provider (§3). The active provider is the one named here *and*
   // holding an API key; with neither key set the orchestrator falls back to the
@@ -59,6 +63,7 @@ export type Config = {
   databaseUrl: string;
   appBaseUrl: string;
   resendApiKey: string | undefined;
+  mailFrom: string;
   botProvider: z.infer<typeof envSchema>['BOT_PROVIDER'];
   anthropicApiKey: string | undefined;
   openaiApiKey: string | undefined;
@@ -98,6 +103,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: e.DATABASE_URL,
     appBaseUrl: e.APP_BASE_URL,
     resendApiKey: e.RESEND_API_KEY,
+    mailFrom: e.MAIL_FROM,
     botProvider: e.BOT_PROVIDER,
     anthropicApiKey: e.ANTHROPIC_API_KEY,
     openaiApiKey: e.OPENAI_API_KEY,

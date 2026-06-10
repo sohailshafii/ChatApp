@@ -53,7 +53,7 @@ npm run dev:server                     # listens on PORT (default 8080)
 The `dev` and `migrate` scripts auto-load the repo-root `.env` via
 `--env-file-if-exists`, so you don't need to export anything by hand. `config.ts`
 reads `DATABASE_URL`, `PORT`, `LOG_LEVEL`, `APP_BASE_URL`, and optional
-`RESEND_API_KEY`; a missing required var fails fast at startup. (Production on Fly
+`RESEND_API_KEY` / `MAIL_FROM`; a missing required var fails fast at startup. (Production on Fly
 gets these from secrets, not a `.env` file — hence `start` does not load one.)
 
 ### Exercising the API
@@ -77,7 +77,13 @@ curl -i -X POST http://localhost:8080/auth/signup \
 
 When `RESEND_API_KEY` is unset, signup **logs** the verification link instead of
 emailing it — grep the server output for `verification link logged for dev` to
-copy the `?token=…` URL. Inspect the persisted rows directly:
+copy the `?token=…` URL. When it **is** set, all three mailers (verification,
+password-reset, data-export) send for real via Resend (`src/mail/transport.ts`,
+a `fetch` POST to the Resend API — no SDK dep; `setMailSender` is the test seam),
+from **`MAIL_FROM`** (default `onboarding@resend.dev`; Resend only accepts a
+sender on a domain verified in your account). Sends are **best-effort** — a
+failure is logged, never thrown, so email never breaks the auth/account flow.
+Inspect the persisted rows directly:
 
 ```bash
 docker exec -it chatapp-postgres psql -U chatapp -d chatapp \
