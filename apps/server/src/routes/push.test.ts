@@ -46,7 +46,7 @@ const SUB = {
 
 describe('GET /push/vapid-public-key', () => {
   it('requires a session', async () => {
-    const res = await app.inject({ method: 'GET', url: '/push/vapid-public-key' });
+    const res = await app.inject({ method: 'GET', url: '/api/push/vapid-public-key' });
     expect(res.statusCode).toBe(401);
   });
 
@@ -54,7 +54,7 @@ describe('GET /push/vapid-public-key', () => {
     const { cookie } = await authed();
     const res = await app.inject({
       method: 'GET',
-      url: '/push/vapid-public-key',
+      url: '/api/push/vapid-public-key',
       headers: { cookie },
     });
     expect(res.statusCode).toBe(200);
@@ -67,7 +67,7 @@ describe('POST /push/subscriptions', () => {
     const { cookie } = await authed();
     const res = await app.inject({
       method: 'POST',
-      url: '/push/subscriptions',
+      url: '/api/push/subscriptions',
       headers: { cookie },
       payload: SUB,
     });
@@ -80,7 +80,7 @@ describe('POST /push/subscriptions', () => {
     const post = (sub: typeof SUB) =>
       app.inject({
         method: 'POST',
-        url: '/push/subscriptions',
+        url: '/api/push/subscriptions',
         headers: { cookie, [CSRF_HEADER_NAME]: CSRF },
         payload: sub,
       });
@@ -108,14 +108,14 @@ describe('DELETE /push/subscriptions', () => {
     const { id, cookie } = await authed();
     await app.inject({
       method: 'POST',
-      url: '/push/subscriptions',
+      url: '/api/push/subscriptions',
       headers: { cookie, [CSRF_HEADER_NAME]: CSRF },
       payload: SUB,
     });
 
     const res = await app.inject({
       method: 'DELETE',
-      url: '/push/subscriptions',
+      url: '/api/push/subscriptions',
       headers: { cookie, [CSRF_HEADER_NAME]: CSRF },
       payload: { endpoint: SUB.endpoint },
     });
@@ -137,14 +137,14 @@ describe('DELETE /push/subscriptions', () => {
     const bob = await authed('bob');
     await app.inject({
       method: 'POST',
-      url: '/push/subscriptions',
+      url: '/api/push/subscriptions',
       headers: { cookie: alice.cookie, [CSRF_HEADER_NAME]: CSRF },
       payload: SUB,
     });
     // Bob tries to delete alice's endpoint — scoped by account, so it's a no-op.
     await app.inject({
       method: 'DELETE',
-      url: '/push/subscriptions',
+      url: '/api/push/subscriptions',
       headers: { cookie: bob.cookie, [CSRF_HEADER_NAME]: CSRF },
       payload: { endpoint: SUB.endpoint },
     });

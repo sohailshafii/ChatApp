@@ -58,6 +58,12 @@ gets these from secrets, not a `.env` file — hence `start` does not load one.)
 
 ### Exercising the API
 
+All REST endpoints are mounted under **`/api`** (#75 — the SPA owns the root path
+namespace, so the API is `/api/*` and the WebSocket is `/api/ws`); only
+**`/healthz`** stays at the root for infra probes. So the route names elsewhere in
+this doc (`GET /conversations`, `POST /auth/login`, …) are reached at
+`/api/conversations`, `/api/auth/login`, etc. — as the curl examples show.
+
 With the server running, from any shell:
 
 ```bash
@@ -65,7 +71,7 @@ With the server running, from any shell:
 curl -s http://localhost:8080/healthz                       # {"status":"ok"}
 
 # Signup happy path — HTTP 200 with an EMPTY body:
-curl -i -X POST http://localhost:8080/auth/signup \
+curl -i -X POST http://localhost:8080/api/auth/signup \
   -H 'Content-Type: application/json' \
   -d '{"username":"alice","email":"alice@example.com","password":"correct horse battery staple"}'
 
@@ -121,11 +127,11 @@ Verify the account using that token, or request a fresh link:
 ```bash
 TOKEN=…   # the token from the logged /verify-email?token=… URL
 # 200 on success; validation_error (400, malformed) / invalid_token (400) / expired_token (410):
-curl -i -X POST http://localhost:8080/auth/verify-email \
+curl -i -X POST http://localhost:8080/api/auth/verify-email \
   -H 'Content-Type: application/json' -d "{\"token\":\"$TOKEN\"}"
 
 # Resend — always 200, never reveals whether the email is registered/verified:
-curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/auth/verify-email/resend \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/api/auth/verify-email/resend \
   -H 'Content-Type: application/json' -d '{"email":"alice@example.com"}'
 ```
 
@@ -146,18 +152,18 @@ JAR=/tmp/chatapp-cookies.txt
 
 # Login — 200 {"user":{…}}. Sets two cookies: `session` (httpOnly) and
 # `csrf_token` (readable). Errors: invalid_credentials (401), unverified (403).
-curl -s -c "$JAR" -X POST http://localhost:8080/auth/login \
+curl -s -c "$JAR" -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"alice","password":"correct horse battery staple"}'
 
 # Current user — 200 {"user":{…}} while the session is live, else 401:
-curl -s -b "$JAR" http://localhost:8080/auth/me
+curl -s -b "$JAR" http://localhost:8080/api/auth/me
 
 # Logout — state-changing, so it needs the double-submit CSRF token: read the
 # `csrf_token` cookie value and echo it in the X-CSRF-Token header. 204 on success;
 # 403 csrf_failure if the header is missing/mismatched.
 CSRF=$(awk '$6=="csrf_token"{print $7}' "$JAR")
-curl -s -b "$JAR" -c "$JAR" -X POST http://localhost:8080/auth/logout \
+curl -s -b "$JAR" -c "$JAR" -X POST http://localhost:8080/api/auth/logout \
   -H "X-CSRF-Token: $CSRF"
 ```
 
@@ -186,14 +192,14 @@ verification, the link is logged (not emailed) while `RESEND_API_KEY` is unset.
 
 ```bash
 # Request by username OR email — always 200, never reveals whether it matched:
-curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/auth/password-reset/request \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/api/auth/password-reset/request \
   -H 'Content-Type: application/json' -d '{"identifier":"alice"}'
 # Then grep the server log for `password-reset link logged for dev` to get the token.
 
 # Confirm with that token + a new password. 200 on success (and ALL of the
 # account's sessions are invalidated); invalid_token (400) / expired_token (410, 1h TTL):
 TOKEN=…
-curl -i -X POST http://localhost:8080/auth/password-reset/confirm \
+curl -i -X POST http://localhost:8080/api/auth/password-reset/confirm \
   -H 'Content-Type: application/json' \
   -d "{\"token\":\"$TOKEN\",\"newPassword\":\"a brand new passphrase\"}"
 ```
@@ -366,12 +372,12 @@ per-participant last-seen cursor (migration 005).
   `src/bots/registry.ts`).
 
 ```bash
-curl -s -b "$JAR" http://localhost:8080/conversations
-curl -s -b "$JAR" http://localhost:8080/conversations/$CONV
-curl -s -b "$JAR" "http://localhost:8080/conversations/$CONV/messages?limit=50"
+curl -s -b "$JAR" http://localhost:8080/api/conversations
+curl -s -b "$JAR" http://localhost:8080/api/conversations/$CONV
+curl -s -b "$JAR" "http://localhost:8080/api/conversations/$CONV/messages?limit=50"
 CSRF=$(awk '$6=="csrf_token"{print $7}' "$JAR")
 curl -s -o /dev/null -w '%{http_code}\n' -b "$JAR" -X POST \
-  http://localhost:8080/conversations/$CONV/read \
+  http://localhost:8080/api/conversations/$CONV/read \
   -H "X-CSRF-Token: $CSRF" -H 'Content-Type: application/json' \
   -d "{\"messageId\":\"$MSG\"}"
 ```
@@ -381,7 +387,7 @@ A message's `sender_id` is the human's account id or a bot slug.
 
 #### WebSocket messaging (§3)
 
-`ws://…/ws` — the upgrade requires the **session cookie + a same-origin `Origin`
+`ws://…/api/ws` — the upgrade requires the **session cookie + a same-origin `Origin`
 header** (§6); otherwise it's refused (401/403). Frame envelopes live in
 `@chatapp/shared` `ws.ts`. The client sends `{type:'send', conversationId,
 clientMessageId, content}`; the server:

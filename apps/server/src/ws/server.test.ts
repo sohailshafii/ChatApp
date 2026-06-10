@@ -36,7 +36,7 @@ beforeAll(async () => {
   app = buildApp();
   await app.listen({ host: '127.0.0.1', port: 0 });
   const { port } = app.server.address() as AddressInfo;
-  wsUrl = `ws://127.0.0.1:${port}/ws`;
+  wsUrl = `ws://127.0.0.1:${port}/api/ws`;
 });
 
 afterAll(async () => {

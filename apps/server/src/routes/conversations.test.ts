@@ -116,12 +116,12 @@ async function insertMessage(
 }
 
 function listFor(cookie: string) {
-  return app.inject({ method: 'GET', url: '/conversations', headers: { cookie } });
+  return app.inject({ method: 'GET', url: '/api/conversations', headers: { cookie } });
 }
 
 describe('GET /conversations', () => {
   it('401s without a session', async () => {
-    const res = await app.inject({ method: 'GET', url: '/conversations' });
+    const res = await app.inject({ method: 'GET', url: '/api/conversations' });
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe('unauthorized');
   });
@@ -216,7 +216,7 @@ describe('GET /conversations/:id', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/conversations/${convId}`,
+      url: `/api/conversations/${convId}`,
       headers: { cookie: alice.cookie },
     });
     expect(res.statusCode).toBe(200);
@@ -232,7 +232,7 @@ describe('GET /conversations/:id', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/conversations/${convId}`,
+      url: `/api/conversations/${convId}`,
       headers: { cookie: alice.cookie },
     });
     expect(res.statusCode).toBe(404);
@@ -243,19 +243,19 @@ describe('GET /conversations/:id', () => {
     const alice = await createUserWithSession('alice');
     const bad = await app.inject({
       method: 'GET',
-      url: '/conversations/not-a-uuid',
+      url: '/api/conversations/not-a-uuid',
       headers: { cookie: alice.cookie },
     });
     expect(bad.statusCode).toBe(404);
     const unknown = await app.inject({
       method: 'GET',
-      url: `/conversations/${randomUUID()}`,
+      url: `/api/conversations/${randomUUID()}`,
       headers: { cookie: alice.cookie },
     });
     expect(unknown.statusCode).toBe(404);
     const anon = await app.inject({
       method: 'GET',
-      url: `/conversations/${randomUUID()}`,
+      url: `/api/conversations/${randomUUID()}`,
     });
     expect(anon.statusCode).toBe(401);
   });
@@ -275,7 +275,7 @@ describe('GET /conversations/:id/messages', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/conversations/${convId}/messages`,
+      url: `/api/conversations/${convId}/messages`,
       headers: { cookie: alice.cookie },
     });
     expect(res.statusCode).toBe(200);
@@ -298,7 +298,7 @@ describe('GET /conversations/:id/messages', () => {
     const first = (
       await app.inject({
         method: 'GET',
-        url: `/conversations/${convId}/messages?limit=2`,
+        url: `/api/conversations/${convId}/messages?limit=2`,
         headers: { cookie: alice.cookie },
       })
     ).json() as MessagePage;
@@ -308,7 +308,7 @@ describe('GET /conversations/:id/messages', () => {
     const second = (
       await app.inject({
         method: 'GET',
-        url: `/conversations/${convId}/messages?limit=2&before=${first.nextBefore}`,
+        url: `/api/conversations/${convId}/messages?limit=2&before=${first.nextBefore}`,
         headers: { cookie: alice.cookie },
       })
     ).json() as MessagePage;
@@ -324,7 +324,7 @@ describe('GET /conversations/:id/messages', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/conversations/${convId}/messages`,
+      url: `/api/conversations/${convId}/messages`,
       headers: { cookie: alice.cookie },
     });
     expect(res.statusCode).toBe(404);
@@ -346,7 +346,7 @@ describe('POST /conversations/:id/read', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/conversations/${convId}/read`,
+      url: `/api/conversations/${convId}/read`,
       headers: { cookie: alice.cookie }, // no CSRF
       payload: { messageId: m.id },
     });
@@ -370,7 +370,7 @@ describe('POST /conversations/:id/read', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/conversations/${convId}/read`,
+      url: `/api/conversations/${convId}/read`,
       headers: authed(alice.cookie),
       payload: { messageId: last.id },
     });
@@ -387,7 +387,7 @@ describe('POST /conversations/:id/read', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/conversations/${convId}/read`,
+      url: `/api/conversations/${convId}/read`,
       headers: authed(alice.cookie),
       payload: { messageId: randomUUID() },
     });
@@ -408,7 +408,7 @@ describe('GET /bots', () => {
     const alice = await createUserWithSession('alice');
     const res = await app.inject({
       method: 'GET',
-      url: '/bots',
+      url: '/api/bots',
       headers: { cookie: alice.cookie },
     });
     expect(res.statusCode).toBe(200);
@@ -419,13 +419,13 @@ describe('GET /bots', () => {
   });
 
   it('401s without a session', async () => {
-    expect((await app.inject({ method: 'GET', url: '/bots' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/api/bots' })).statusCode).toBe(401);
   });
 });
 
 describe('POST /conversations', () => {
   const start = (cookie: string, payload: Record<string, unknown>) =>
-    app.inject({ method: 'POST', url: '/conversations', headers: csrfHeaders(cookie), payload });
+    app.inject({ method: 'POST', url: '/api/conversations', headers: csrfHeaders(cookie), payload });
 
   it('starts a human conversation and is idempotent', async () => {
     const alice = await createUserWithSession('alice');
@@ -479,14 +479,14 @@ describe('POST /conversations', () => {
     const alice = await createUserWithSession('alice');
     const noCsrf = await app.inject({
       method: 'POST',
-      url: '/conversations',
+      url: '/api/conversations',
       headers: { cookie: alice.cookie },
       payload: { peerKind: 'human', username: 'bob' },
     });
     expect(noCsrf.statusCode).toBe(403);
     const anon = await app.inject({
       method: 'POST',
-      url: '/conversations',
+      url: '/api/conversations',
       payload: { peerKind: 'human', username: 'bob' },
     });
     expect(anon.statusCode).toBe(401);
@@ -531,7 +531,7 @@ describe('DELETE /conversations/:id', () => {
 
     const del = await app.inject({
       method: 'DELETE',
-      url: `/conversations/${convId}`,
+      url: `/api/conversations/${convId}`,
       headers: csrfHeaders(alice.cookie),
     });
     expect(del.statusCode).toBe(204);
@@ -555,14 +555,14 @@ describe('DELETE /conversations/:id', () => {
     const convId = await createHumanConversation(alice.id, bob.id);
     await app.inject({
       method: 'DELETE',
-      url: `/conversations/${convId}`,
+      url: `/api/conversations/${convId}`,
       headers: csrfHeaders(alice.cookie),
     });
     expect((await listFor(alice.cookie)).json().conversations).toEqual([]);
 
     const res = await app.inject({
       method: 'POST',
-      url: '/conversations',
+      url: '/api/conversations',
       headers: csrfHeaders(alice.cookie),
       payload: { peerKind: 'human', username: 'bob' },
     });
@@ -578,14 +578,14 @@ describe('DELETE /conversations/:id', () => {
 
     const notMine = await app.inject({
       method: 'DELETE',
-      url: `/conversations/${convId}`,
+      url: `/api/conversations/${convId}`,
       headers: csrfHeaders(alice.cookie),
     });
     expect(notMine.statusCode).toBe(404);
 
     const noCsrf = await app.inject({
       method: 'DELETE',
-      url: `/conversations/${convId}`,
+      url: `/api/conversations/${convId}`,
       headers: { cookie: alice.cookie },
     });
     expect(noCsrf.statusCode).toBe(403);

@@ -26,11 +26,22 @@ export function buildApp(): FastifyInstance {
   // is double-submit), so there is nothing to sign.
   app.register(fastifyCookie);
 
+  // /healthz stays at the root for infra probes (Fly health checks). Everything
+  // else lives under /api so the SPA and the API never share a path namespace
+  // (#75): in production a static host can serve index.html for any non-/api,
+  // non-/healthz path while the API answers /api/*. The WebSocket likewise moves
+  // under /api (/api/ws, see ws/server.ts) so the contract is simply
+  // "/api/* + /healthz are the server; everything else is the SPA".
   registerHealthRoutes(app);
-  registerAuthRoutes(app);
-  registerConversationRoutes(app);
-  registerBotRoutes(app);
-  registerPushRoutes(app);
+  app.register(
+    async (api) => {
+      registerAuthRoutes(api);
+      registerConversationRoutes(api);
+      registerBotRoutes(api);
+      registerPushRoutes(api);
+    },
+    { prefix: '/api' },
+  );
   registerWebSocket(app);
 
   return app;
