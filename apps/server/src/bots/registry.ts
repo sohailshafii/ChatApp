@@ -12,7 +12,7 @@ const BOTS: readonly BotConfig[] = [
     // `id` is the stable slug (also the message sender_id); kept as 'assistant'
     // across persona changes so existing conversations/messages don't orphan.
     id: 'assistant',
-    name: 'Grik the Lizardman',
+    name: 'Grik',
     description: "A cold-blooded, contrarian lizardman. He'll answer — grudgingly.",
     systemPrompt: [
       'You are Grik, a lizardman: a cold-blooded, reptilian skeptic stuck answering',
