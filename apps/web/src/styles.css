@@ -427,12 +427,17 @@ input[type='checkbox'] {
   margin-top: 0.55rem;
 }
 
-/* Date divider between day buckets. */
+/* Date divider between day buckets — sticks to the top of the thread while its
+   day scrolls past. */
 .message-divider {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0.85rem 0 0.35rem;
+  pointer-events: none; /* the floating chip shouldn't block clicks/selection */
 }
 
 .message-divider span {
@@ -894,17 +899,42 @@ a.btn-primary {
   border-right: 1px solid var(--border);
 }
 
-.sidebar-head {
+/* Sticky rail header: title + compose, with the search box below it. */
+.sidebar-top {
   position: sticky;
   top: 0;
   z-index: 1;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.85rem 1rem;
-  background: var(--surface-sunken);
-  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-search {
+  padding: 0 0.75rem 0.6rem;
+}
+
+.sidebar-search-input {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.sidebar-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .sidebar-head h2 {
@@ -1011,11 +1041,46 @@ a.btn-primary {
   color: var(--text-muted);
 }
 
+/* Holds the scroll area plus the floating "jump to latest" pill. */
+.chat-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .chat-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 1rem 1.25rem;
+}
+
+.scroll-bottom-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 0.85rem;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-contrast);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.scroll-bottom-btn:hover {
+  background: var(--accent-strong);
+  transform: translateX(-50%) translateY(-1px);
 }
 
 .chat .socket-status {
@@ -1032,32 +1097,44 @@ a.btn-primary {
   display: none;
 }
 
-/* Empty centre pane (no conversation selected) */
-.chat-empty {
-  height: 100%;
+/* Shared empty state: emoji in a tinted circle + title + copy. `is-fill`
+   vertically centers it in a full-height parent. */
+.empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  padding: 2rem;
+  gap: 0.3rem;
+  padding: 2.5rem 1.5rem;
   text-align: center;
   color: var(--text-muted);
 }
 
-.chat-empty-emoji {
-  margin: 0;
-  font-size: 3rem;
+.empty-state.is-fill {
+  height: 100%;
 }
 
-.chat-empty-title {
+.empty-state-emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: 0 0 0.5rem;
+  font-size: 2.25rem;
+  background: var(--accent-soft);
+  border-radius: 50%;
+}
+
+.empty-state-title {
   margin: 0;
   font-weight: 600;
   color: var(--text);
 }
 
-.chat-empty-sub {
+.empty-state-sub {
   margin: 0;
+  max-width: 22rem;
 }
 
 /* Single-pane on narrow screens: the rail at `/`, the chat once one is open. */

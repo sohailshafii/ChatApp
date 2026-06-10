@@ -7,6 +7,7 @@ import {
   applyFrameToConversations,
   frameTargetsUnknownConversation,
 } from '../chat/conversationListUpdate';
+import { peerName } from '../lib/peer';
 import { ConversationList } from './ConversationList';
 import { ConversationListSkeleton } from './Skeletons';
 
@@ -19,6 +20,7 @@ export function ConversationSidebar() {
   const { subscribe } = useChatSocket();
   const [status, setStatus] = useState<Status>('loading');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [query, setQuery] = useState('');
 
   // The currently open conversation, so we can highlight it and clear its badge.
   // `/conversations/:id` also matches `/conversations/new`, so exclude that.
@@ -108,18 +110,38 @@ export function ConversationSidebar() {
     }
   }, []);
 
+  // Client-side filter by peer name (the list is already loaded).
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? conversations.filter((c) => peerName(c.peer).toLowerCase().includes(q))
+    : conversations;
+
   return (
     <nav className="conversation-sidebar" aria-label="Conversations">
-      <div className="sidebar-head">
-        <h2 id="chats-heading">Chats</h2>
-        <Link
-          to="/conversations/new"
-          className="compose-btn"
-          aria-label="New conversation"
-          title="New conversation"
-        >
-          <span aria-hidden="true">+</span>
-        </Link>
+      <div className="sidebar-top">
+        <div className="sidebar-head">
+          <h2 id="chats-heading">Chats</h2>
+          <Link
+            to="/conversations/new"
+            className="compose-btn"
+            aria-label="New conversation"
+            title="New conversation"
+          >
+            <span aria-hidden="true">+</span>
+          </Link>
+        </div>
+        {status === 'ready' && conversations.length > 0 && (
+          <div className="sidebar-search">
+            <input
+              type="search"
+              className="sidebar-search-input"
+              placeholder="Search conversations"
+              aria-label="Search conversations"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       {status === 'loading' && <ConversationListSkeleton />}
@@ -128,13 +150,16 @@ export function ConversationSidebar() {
           Couldn’t load your conversations. Please refresh to try again.
         </p>
       )}
-      {status === 'ready' && (
-        <ConversationList
-          conversations={conversations}
-          activeId={activeId}
-          onHide={handleHide}
-        />
-      )}
+      {status === 'ready' &&
+        (q && visible.length === 0 ? (
+          <p className="sidebar-note empty">No conversations match “{query.trim()}”.</p>
+        ) : (
+          <ConversationList
+            conversations={visible}
+            activeId={activeId}
+            onHide={handleHide}
+          />
+        ))}
     </nav>
   );
 }
