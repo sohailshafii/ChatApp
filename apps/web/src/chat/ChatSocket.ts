@@ -5,9 +5,10 @@ import {
   type ServerWsMessage,
 } from '@chatapp/shared';
 
-// Single per-tab WebSocket to /ws (§3). Same-origin in production; in dev the
-// Vite proxy forwards /ws to the backend (cookies + Origin carry through, so the
-// server's upgrade auth passes). Reconnects with capped backoff while running.
+// Single per-tab WebSocket to /api/ws (§3; under the /api namespace per issue
+// #75). Same-origin in production; in dev the Vite proxy forwards /api to the
+// backend (cookies + Origin carry through, so the server's upgrade auth passes).
+// Reconnects with capped backoff while running.
 
 export type SocketStatus = 'connecting' | 'open' | 'closed';
 
@@ -19,7 +20,7 @@ const MAX_RECONNECT_MS = 30_000;
 
 function socketUrl(): string {
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${scheme}://${window.location.host}/ws`;
+  return `${scheme}://${window.location.host}/api/ws`;
 }
 
 export class ChatSocket {

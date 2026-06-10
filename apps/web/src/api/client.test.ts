@@ -48,7 +48,7 @@ describe('apiFetch', () => {
 
     expect(result).toEqual({ user: { id: '1' } });
     const [url, opts] = fetchMock.mock.calls[0]!;
-    expect(url).toBe('/auth/me');
+    expect(url).toBe('/api/auth/me');
     expect(opts.method).toBe('GET');
     expect(opts.credentials).toBe('same-origin');
     expect(opts.body).toBeUndefined();

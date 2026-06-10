@@ -45,8 +45,10 @@ arrive, add a DOM environment (jsdom/happy-dom) at that point rather than now.
 
 ### Run the app in a browser
 
-The web app calls `/auth/*` on its own origin and Vite proxies those to the
-backend, so cookies stay first-party. To see the app working end-to-end you need
+The web app calls the backend under `/api/*` (REST + the `/api/ws` socket) on its
+own origin, and Vite proxies `/api` to the backend, so cookies stay first-party.
+Client routes live outside `/api`, so a hard reload / deep link falls through to
+the SPA (issue #75). To see the app working end-to-end you need
 Postgres + the server + the web dev server. Backend details live in
 [`../server/CLAUDE.md`](../server/CLAUDE.md); the full loop:
 
