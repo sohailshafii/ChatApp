@@ -1,5 +1,6 @@
 import type { BotErrorCode } from '@chatapp/shared';
-import { formatConversationTimestamp } from '../lib/time';
+import { formatAbsoluteTimestamp, formatRelativeTime } from '../lib/time';
+import { useNow } from '../lib/useNow';
 import type { DisplayMessage } from '../chat/messageReducer';
 import { buildMessageRows } from '../chat/messageGrouping';
 import { MessageText } from './MessageText';
@@ -18,6 +19,8 @@ export function MessageList({
   peerLabel: string;
 }) {
   const rows = buildMessageRows(messages);
+  // One ticker re-renders the list each minute so "x min ago" stays current.
+  const now = useNow(30_000);
   return (
     <ol className="message-list">
       {rows.map((row) =>
@@ -32,6 +35,7 @@ export function MessageList({
             startsGroup={row.startsGroup}
             ownId={ownId}
             peerLabel={peerLabel}
+            now={now}
           />
         ),
       )}
@@ -44,11 +48,13 @@ function MessageRow({
   startsGroup,
   ownId,
   peerLabel,
+  now,
 }: {
   message: DisplayMessage;
   startsGroup: boolean;
   ownId: string;
   peerLabel: string;
+  now: Date;
 }) {
   const mine = m.senderId === ownId;
   const failedBot = m.status === 'failed' && !mine;
@@ -87,8 +93,8 @@ function MessageRow({
         )}
         {!typing && (
           <span className="message-meta">
-            <time dateTime={m.createdAt}>
-              {formatConversationTimestamp(m.createdAt)}
+            <time dateTime={m.createdAt} title={formatAbsoluteTimestamp(m.createdAt)}>
+              {formatRelativeTime(m.createdAt, now)}
             </time>
             {mine && <OwnStatus status={m.status} />}
           </span>
