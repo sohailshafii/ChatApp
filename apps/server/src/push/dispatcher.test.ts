@@ -93,7 +93,7 @@ describe('dispatchMessagePush', () => {
       [bobId], // the human; the bot is not a participant account
     );
     expect(sent).toHaveLength(1);
-    expect(JSON.parse(sent[0]!.payload).title).toBe('Grik the Lizardman');
+    expect(JSON.parse(sent[0]!.payload).title).toBe('Grik');
   });
 
   it('prunes a subscription the push service reports as gone (404/410)', async () => {
