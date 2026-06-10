@@ -656,6 +656,12 @@ a.btn-primary {
   overflow-y: auto;
 }
 
+/* main receives programmatic focus on route change (focus management); it isn't
+   keyboard-tabbable, so suppress the focus ring it would otherwise draw. */
+.app-main:focus {
+  outline: none;
+}
+
 /* Subtle, theme-aware scrollbars for the scrolling panes. */
 .app-main,
 .conversation-sidebar,

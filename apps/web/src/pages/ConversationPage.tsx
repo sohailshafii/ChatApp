@@ -46,6 +46,12 @@ export function ConversationPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
+  // Politely announce incoming peer/bot messages to assistive tech (the visual
+  // thread isn't a live region, so screen-reader users wouldn't hear new ones).
+  const [announcement, setAnnouncement] = useState('');
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
   // Track whether the user is near the bottom as they scroll the message pane.
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -93,16 +99,24 @@ export function ConversationPage() {
 
   // Live frames for this conversation.
   useEffect(() => {
+    const announce = (content: string) => {
+      const cur = loadRef.current;
+      const who = cur.status === 'ready' ? peerName(cur.conversation.peer) : 'New message';
+      setAnnouncement(`${who} said: ${content}`);
+    };
     return subscribe((frame) => {
       dispatch({ type: 'frame', conversationId: id, frame });
-      // Keep the read cursor current for messages that arrive while viewing.
+      // Keep the read cursor current — and announce — for messages that arrive
+      // while viewing. Skip our own echoes; announce the bot reply once complete.
       if (frame.type === 'message' && frame.message.conversationId === id) {
         void markConversationRead(id, frame.message.id).catch(() => {});
+        if (frame.message.senderId !== user?.id) announce(frame.message.content);
       } else if (frame.type === 'bot_end' && frame.message.conversationId === id) {
         void markConversationRead(id, frame.message.id).catch(() => {});
+        announce(frame.message.content);
       }
     });
-  }, [id, subscribe]);
+  }, [id, subscribe, user?.id]);
 
   const loadOlder = useCallback(async () => {
     if (!nextBefore || loadingOlder) return;
@@ -210,6 +224,10 @@ export function ConversationPage() {
           {hiding ? 'Hiding…' : 'Hide'}
         </button>
       </header>
+
+      <div className="visually-hidden" aria-live="polite">
+        {announcement}
+      </div>
 
       {socketStatus !== 'open' && (
         <p className="socket-status" role="status">
