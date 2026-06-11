@@ -994,15 +994,20 @@ a.btn-primary {
   color: var(--link);
 }
 
-/* Centre: active conversation */
+/* Centre: active conversation. A flex column so its child fills the pane via
+   `flex: 1` rather than a percentage height — a stretched grid item isn't a
+   reliable basis for `height: 100%`, which left the chat content-height with
+   dead space below the composer. */
 .chat-pane {
   min-height: 0;
   overflow-y: auto;
   background: var(--surface);
+  display: flex;
+  flex-direction: column;
 }
 
 .chat {
-  height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1115,7 +1120,8 @@ a.btn-primary {
 }
 
 .empty-state.is-fill {
-  height: 100%;
+  flex: 1; /* fill a flex parent (chat-pane) */
+  height: 100%; /* fill a block parent (chat-scroll) */
 }
 
 .empty-state-emoji {
