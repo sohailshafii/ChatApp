@@ -995,12 +995,15 @@ a.btn-primary {
 }
 
 /* Centre: active conversation. A flex column so its child fills the pane via
-   `flex: 1` rather than a percentage height — a stretched grid item isn't a
-   reliable basis for `height: 100%`, which left the chat content-height with
-   dead space below the composer. */
+   `flex: 1` (a stretched grid item isn't a reliable basis for `height: 100%`).
+   `overflow: hidden` — NOT auto: the chat manages its own scrolling (.chat-scroll),
+   so the pane must never become a scroll container itself. When it did, a
+   transient overflow could leave it scrolled, shoving the chat up and stranding
+   the composer mid-pane with dead space below. Form pages that render here
+   instead of a chat (new-conversation, error) get their own scroll below. */
 .chat-pane {
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--surface);
   display: flex;
   flex-direction: column;
@@ -1011,6 +1014,14 @@ a.btn-primary {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* Non-chat content in the centre pane (new-conversation form, error) scrolls
+   on its own, since the pane no longer scrolls. */
+.chat-pane > .page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .chat-header {
