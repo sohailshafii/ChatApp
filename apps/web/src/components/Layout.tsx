@@ -23,7 +23,7 @@ export function Layout() {
       return;
     }
     const main = mainRef.current;
-    main?.focus();
+    main?.focus({ preventScroll: true });
     const readHeading = () => main?.querySelector('h1')?.textContent?.trim() ?? '';
 
     // If the new view's heading is already mounted, announce it. Otherwise the
