@@ -1,7 +1,7 @@
 # Fly.io configuration for ChatApp. Single-origin: the server serves the SPA at
 # the root and the API under /api (see the repo-root Dockerfile).
 
-app = "chatapp"
+app = "furiousnacho-chat"
 primary_region = "iad"
 
 # No builder config needed: `fly deploy` auto-detects the repo-root Dockerfile.
