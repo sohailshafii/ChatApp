@@ -8,11 +8,12 @@ import { registerConversationRoutes } from './routes/conversations.js';
 import { registerBotRoutes } from './routes/bots.js';
 import { registerPushRoutes } from './routes/push.js';
 import { registerWebSocket } from './ws/server.js';
+import { registerSpa } from './static.js';
 
 // Builds the Fastify instance with routes registered but without listening, so
 // it can be reused by the entrypoint and (later) by tests.
 export function buildApp(): FastifyInstance {
-  const { logLevel } = loadConfig();
+  const { logLevel, webDistDir } = loadConfig();
 
   const app = Fastify({
     logger: { level: logLevel },
@@ -43,6 +44,13 @@ export function buildApp(): FastifyInstance {
     { prefix: '/api' },
   );
   registerWebSocket(app);
+
+  // Production single-origin serving: serve the built SPA at the root with an
+  // index.html fallback for client-side routes. No-op in dev/test (no dist dir),
+  // where Vite serves the SPA — so the test app is unchanged.
+  if (registerSpa(app, webDistDir)) {
+    app.log.info({ webDistDir }, 'serving web SPA at root');
+  }
 
   return app;
 }

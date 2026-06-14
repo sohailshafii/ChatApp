@@ -1,10 +1,17 @@
-# Fly.io configuration for ChatApp.
-# Filled in when we deploy the first version.
+# Fly.io configuration for ChatApp. Single-origin: the server serves the SPA at
+# the root and the API under /api (see the repo-root Dockerfile).
 
 app = "chatapp"
 primary_region = "iad"
 
+# No builder config needed: `fly deploy` auto-detects the repo-root Dockerfile.
 [build]
+
+# Run pending SQL migrations before each release is promoted. Runs the bundled
+# migration runner in a one-off machine with the app's secrets (DATABASE_URL); a
+# non-zero exit aborts the deploy, so a bad migration never goes live.
+[deploy]
+  release_command = "node apps/server/dist/db/migrate.js"
 
 [http_service]
   internal_port = 8080
@@ -19,3 +26,12 @@ primary_region = "iad"
   auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 0
+
+  # Liveness probe Fly uses to gate a deploy and restart a wedged machine.
+  # /healthz stays at the root (no DB touch) precisely for this.
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"

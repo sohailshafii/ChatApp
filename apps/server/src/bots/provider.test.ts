@@ -16,6 +16,7 @@ function config(overrides: Partial<Config>): Config {
     logLevel: 'info',
     databaseUrl: 'postgres://x',
     appBaseUrl: 'http://localhost:5173',
+    webDistDir: undefined,
     resendApiKey: undefined,
     mailFrom: 'onboarding@resend.dev',
     botProvider: 'anthropic',
