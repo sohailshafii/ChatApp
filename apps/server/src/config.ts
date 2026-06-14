@@ -18,6 +18,12 @@ const envSchema = z.object({
   // Defaults to the Vite dev server origin.
   APP_BASE_URL: z.string().url().default('http://localhost:5173'),
 
+  // Directory of the built web SPA (Vite `dist`) to serve at the root in
+  // production (single-origin: SPA at `/`, API at `/api`). Set in the Docker
+  // image; unset in dev/test, where Vite serves the SPA, so the server skips
+  // static serving entirely. See src/static.ts.
+  WEB_DIST_DIR: z.string().optional(),
+
   // Optional in dev: when unset, verification emails are logged instead of sent.
   RESEND_API_KEY: z.string().optional(),
   // The From address on outgoing mail. Resend only accepts a sender on a domain
@@ -62,6 +68,7 @@ export type Config = {
   logLevel: z.infer<typeof envSchema>['LOG_LEVEL'];
   databaseUrl: string;
   appBaseUrl: string;
+  webDistDir: string | undefined;
   resendApiKey: string | undefined;
   mailFrom: string;
   botProvider: z.infer<typeof envSchema>['BOT_PROVIDER'];
@@ -102,6 +109,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     logLevel: e.LOG_LEVEL,
     databaseUrl: e.DATABASE_URL,
     appBaseUrl: e.APP_BASE_URL,
+    webDistDir: e.WEB_DIST_DIR,
     resendApiKey: e.RESEND_API_KEY,
     mailFrom: e.MAIL_FROM,
     botProvider: e.BOT_PROVIDER,

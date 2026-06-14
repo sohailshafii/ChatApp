@@ -1,0 +1,14 @@
+# Keep the build context lean and reproducible: deps and build outputs are
+# (re)created inside the image, and secrets must never be copied in.
+**/node_modules
+**/dist
+.git
+.gitignore
+**/.env
+.env*
+**/*.log
+**/*.test.ts
+**/coverage
+.DS_Store
+Dockerfile
+.dockerignore
