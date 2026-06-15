@@ -1169,8 +1169,13 @@ a.btn-primary {
   .messaging-layout.has-active-chat .conversation-sidebar {
     display: none;
   }
+  /* Reveal as flex (not block): the base .chat-pane is a flex column, and the
+     fill chain (.chat → .chat-body → .chat-scroll via flex:1) plus the pinned,
+     flex-shrink:0 composer depend on it. `display: block` here would strand the
+     composer mid-pane and let a tall thread grow the pane instead of scrolling
+     .chat-scroll — pushing the input off-screen and dismissing the keyboard. */
   .messaging-layout.has-active-chat .chat-pane {
-    display: block;
+    display: flex;
   }
   .back-link {
     display: inline-flex;
