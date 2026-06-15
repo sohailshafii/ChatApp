@@ -87,6 +87,9 @@ export function LoginPage() {
           id="username"
           label="Username"
           autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           value={values.username}
           error={fieldErrors.username}
           onChange={(v) => update('username', v)}

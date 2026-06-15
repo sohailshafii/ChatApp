@@ -4,6 +4,46 @@
 // conversation. The payload shape mirrors `PushPayload` in @chatapp/shared:
 // { title, body, conversationId }.
 
+// Take over as soon as an updated worker is installed, instead of waiting for
+// every tab to close. Without this, a shipped change to this file (e.g. the
+// suppress-the-open-conversation logic below) keeps running the *old* worker
+// until the user happens to close all tabs — so the fix appears not to work
+// "unless I refresh".
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+// The conversation currently open in a visible tab, reported by the page via
+// postMessage (see NotificationsProvider). This is the reliable signal for
+// "don't notify the chat I'm looking at": WindowClient.url can lag behind
+// in-app (history.pushState) navigation, so matching on it alone misses until a
+// full reload. Null when nothing is focused. Lost if the worker is evicted —
+// the clients.matchAll check below is the fallback in that case.
+let focusedConversationId = null;
+
+self.addEventListener('message', (event) => {
+  const data = event.data;
+  if (data && data.type === 'focus-state') {
+    focusedConversationId = data.conversationId || null;
+  }
+});
+
+// True when `conversationId` is open in a visible tab. Prefers the page's
+// postMessage signal (robust to in-app navigation); falls back to matching a
+// visible client's URL in case the worker restarted and lost that state.
+async function isConversationFocused(conversationId) {
+  if (focusedConversationId === conversationId) return true;
+  const clients = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+  const target = '/conversations/' + conversationId;
+  return clients.some(
+    (c) => c.visibilityState === 'visible' && new URL(c.url).pathname === target,
+  );
+}
+
 self.addEventListener('push', (event) => {
   let payload = {};
   try {
@@ -19,22 +59,13 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
-      // Don't double-notify the conversation you're already reading: if a
-      // visible tab is on this conversation, the in-app live view (and badge)
-      // already surface the message, so suppress the OS notification. Mirrors
-      // the in-tab notifier, which skips the focused+visible conversation. The
-      // server pushes to every device and can't know which chat is open, so
-      // this decision has to live here. Other conversations still notify.
-      if (conversationId) {
-        const clients = await self.clients.matchAll({
-          type: 'window',
-          includeUncontrolled: true,
-        });
-        const target = '/conversations/' + conversationId;
-        const beingViewed = clients.some(
-          (c) => c.visibilityState === 'visible' && new URL(c.url).pathname === target,
-        );
-        if (beingViewed) return;
+      // Don't double-notify the conversation you're already reading: if it's
+      // focused in a visible tab, the in-app live view (and badge) already
+      // surface the message, so suppress the OS notification. The server pushes
+      // to every device and can't know which chat is open, so this decision
+      // lives here. Other conversations still notify.
+      if (conversationId && (await isConversationFocused(conversationId))) {
+        return;
       }
 
       await self.registration.showNotification(title, {

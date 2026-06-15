@@ -129,6 +129,25 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     if (openId && visible) dispatch({ type: 'read', conversationId: openId });
   }, [openId, visible]);
 
+  // Tell the service worker which conversation is focused, so a Web Push for the
+  // chat you're actively reading is suppressed (state D). The SW's URL check can
+  // lag in-app navigation, so this postMessage is the authoritative signal.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const conversationId = visible ? openId : null;
+    let cancelled = false;
+    navigator.serviceWorker.ready
+      .then((reg) => {
+        if (!cancelled) reg.active?.postMessage({ type: 'focus-state', conversationId });
+      })
+      .catch(() => {
+        // No active worker yet (push not set up) — nothing to inform.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openId, visible]);
+
   const fireNotification = useCallback(
     (conversationId: string, content: string) => {
       try {

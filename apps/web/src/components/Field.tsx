@@ -10,6 +10,11 @@ export interface FieldProps {
   hint?: string;
   type?: string;
   autoComplete?: string;
+  // Mobile keyboards capitalize/autocorrect by default, which is wrong for
+  // identifiers like usernames and emails — callers opt out via these.
+  autoCapitalize?: string;
+  autoCorrect?: string;
+  spellCheck?: boolean;
 }
 
 export function Field({
@@ -21,6 +26,9 @@ export function Field({
   hint,
   type = 'text',
   autoComplete,
+  autoCapitalize,
+  autoCorrect,
+  spellCheck,
 }: FieldProps) {
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
@@ -40,6 +48,9 @@ export function Field({
         type={type}
         value={value}
         autoComplete={autoComplete}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        spellCheck={spellCheck}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         onChange={(e) => onChange(e.target.value)}
