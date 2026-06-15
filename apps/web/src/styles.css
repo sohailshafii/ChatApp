@@ -30,6 +30,7 @@
   /* Semantic */
   --danger: #d11a45;
   --danger-soft: #fdebef;
+  --success: #1a7f4b;
   --warning-soft: #fff4e0;
   --peer-bubble: #eef0f6;
 
@@ -74,6 +75,7 @@
 
     --danger: #f4577a;
     --danger-soft: #2c151c;
+    --success: #4ade80;
     --warning-soft: #342910;
     --peer-bubble: #262834;
 
@@ -734,6 +736,35 @@ a.btn-primary {
 
 .form-hint {
   margin: 0;
+}
+
+/* Live password-requirement checklist (signup). Unmet items read muted; met
+   items flip to the success colour with a check. */
+.password-reqs {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.password-reqs li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.password-reqs li.met {
+  color: var(--success);
+}
+
+.password-reqs-mark {
+  width: 1rem;
+  text-align: center;
+  font-weight: 700;
 }
 
 .field input {

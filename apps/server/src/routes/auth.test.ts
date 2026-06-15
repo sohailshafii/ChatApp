@@ -20,7 +20,9 @@ import { buildExport } from '../auth/data-export.js';
 // (provisioned in global-setup) — the curl flow from apps/server/CLAUDE.md,
 // using Fastify's in-process injector instead of the network.
 
-const PASSWORD = 'correct horse battery staple';
+// Compliant with the new-password policy (12+ chars, upper, lower, number) so
+// the signup/reset paths accept it; login/re-auth accept it too.
+const PASSWORD = 'Correct-Horse9-Staple';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -97,6 +99,22 @@ describe('POST /auth/signup', () => {
       ['alice'],
     );
     expect(rows[0]?.verified).toBe(false);
+  });
+
+  it('rejects a password that fails the new-password policy', async () => {
+    // Long but missing an uppercase letter and a number — passes the old 8-char
+    // floor, fails the strengthened policy.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: {
+        username: 'alice',
+        email: 'alice@example.com',
+        password: 'all lowercase words',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('validation_error');
   });
 
   it('rejects a duplicate username / email with the precise code', async () => {
@@ -590,7 +608,7 @@ describe('POST /auth/password-reset/request', () => {
 });
 
 describe('POST /auth/password-reset/confirm', () => {
-  const NEW_PASSWORD = 'a brand new passphrase';
+  const NEW_PASSWORD = 'Brand-New9-Passphrase';
 
   it('sets the new password, kills sessions, and consumes the token', async () => {
     await createVerifiedUser();
@@ -709,7 +727,7 @@ describe('auth audit log (§6)', () => {
     await app.inject({
       method: 'POST',
       url: '/api/auth/password-reset/confirm',
-      payload: { token: raw, newPassword: 'a brand new passphrase' },
+      payload: { token: raw, newPassword: 'Brand-New9-Passphrase' },
     });
     expect(await auditRows()).toEqual([
       { event: 'password_reset', account_id: id },

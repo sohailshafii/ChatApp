@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { signupRequestSchema } from '@chatapp/shared';
+import { passwordRequirements, signupRequestSchema } from '@chatapp/shared';
 import { ApiError } from '../api/client';
 import { signup } from '../api/auth';
 import { Field } from '../components/Field';
@@ -101,6 +101,9 @@ export function SignupPage() {
           id="username"
           label="Username"
           autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           value={values.username}
           error={fieldErrors.username}
           onChange={(v) => update('username', v)}
@@ -111,6 +114,9 @@ export function SignupPage() {
           label="Email"
           type="email"
           autoComplete="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           value={values.email}
           error={fieldErrors.email}
           onChange={(v) => update('email', v)}
@@ -123,8 +129,22 @@ export function SignupPage() {
           value={values.password}
           error={fieldErrors.password}
           onChange={(v) => update('password', v)}
-          hint="At least 8 characters."
+          hint="At least 12 characters, with an uppercase letter, a lowercase letter, and a number."
         />
+        {/* Live requirement checklist. The hint above already conveys the rules
+            to screen readers (via aria-describedby), so this visual aid is
+            aria-hidden to avoid announcing every keystroke. */}
+        <ul className="password-reqs" aria-hidden="true">
+          {passwordRequirements.map((req) => {
+            const met = req.test(values.password);
+            return (
+              <li key={req.id} className={met ? 'met' : undefined}>
+                <span className="password-reqs-mark">{met ? '✓' : '○'}</span>
+                {req.label}
+              </li>
+            );
+          })}
+        </ul>
 
         <div className="field-checkbox">
           <label>

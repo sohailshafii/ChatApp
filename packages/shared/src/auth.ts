@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   emailSchema,
+  newPasswordSchema,
   passwordSchema,
   tokenSchema,
   usernameSchema,
@@ -16,7 +17,8 @@ import { accountUserSchema } from './user.js';
 export const signupRequestSchema = z.object({
   username: usernameSchema,
   email: emailSchema,
-  password: passwordSchema,
+  // A brand-new password: enforce the stronger policy (login stays permissive).
+  password: newPasswordSchema,
 });
 export type SignupRequest = z.infer<typeof signupRequestSchema>;
 // Success: 200 with empty body. Verification email is sent asynchronously.
@@ -62,7 +64,8 @@ export type PasswordResetRequest = z.infer<typeof passwordResetRequestSchema>;
 // POST /auth/password-reset/confirm
 export const passwordResetConfirmSchema = z.object({
   token: tokenSchema,
-  newPassword: passwordSchema,
+  // Setting a new password: same strengthened policy as signup.
+  newPassword: newPasswordSchema,
 });
 export type PasswordResetConfirm = z.infer<typeof passwordResetConfirmSchema>;
 
