@@ -4,9 +4,10 @@ import type { ConversationSummary, ServerWsMessage } from '@chatapp/shared';
 // affected conversation's last-message preview + timestamp, bumps it to the top,
 // and increments unread for incoming messages. Pure, so it's unit-testable.
 //
-// Used while the list is on screen — the user isn't inside any conversation
-// then, so an incoming message there is genuinely unread. (Returning to the list
-// re-fetches from the server, which is the source of truth for unread counts.)
+// This bumps unread for any incoming message. The caller (ConversationSidebar)
+// is responsible for not leaving a badge on the conversation that's currently
+// open in the two-pane layout — it clears the active row after applying. The
+// server remains the source of truth for unread counts (a refetch reconciles).
 
 interface Effect {
   conversationId: string;

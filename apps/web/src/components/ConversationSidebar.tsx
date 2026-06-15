@@ -32,6 +32,10 @@ export function ConversationSidebar() {
   const listRef = useRef<ConversationSummary[]>(conversations);
   listRef.current = conversations;
 
+  // Latest open conversation, read inside the once-subscribed socket handler.
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+
   useEffect(() => {
     let active = true;
     listConversations()
@@ -88,7 +92,20 @@ export function ConversationSidebar() {
         void refetchList();
         return;
       }
-      setConversations((prev) => applyFrameToConversations(prev, frame));
+      setConversations((prev) => {
+        const next = applyFrameToConversations(prev, frame);
+        // The two-pane layout keeps this rail mounted while a chat is open, so a
+        // live message can arrive for the conversation you're currently reading.
+        // That isn't unread — clear the open chat's badge (ConversationPage marks
+        // it read on the server). Other conversations still bump normally.
+        const active = activeIdRef.current;
+        if (active && next !== prev) {
+          return next.map((c) =>
+            c.id === active && c.unreadCount > 0 ? { ...c, unreadCount: 0 } : c,
+          );
+        }
+        return next;
+      });
     });
   }, [subscribe, refetchList]);
 
