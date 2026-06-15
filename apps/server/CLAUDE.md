@@ -477,3 +477,31 @@ npm run build -w @chatapp/server
   `hub` aren't shared across machines yet. The plan to scale out (Redis-backed
   counters + pub/sub fan-out, phased) is scoped in
   [`docs/multi-machine.md`](../../docs/multi-machine.md).
+
+### Deploying
+
+A single-origin image (the [repo-root `Dockerfile`](../../Dockerfile)) builds the
+SPA + bundles the server; `fly deploy` builds it on Fly's remote builder, runs
+pending migrations via the `release_command` in `fly.toml`, and boots the app.
+
+**Use `fly deploy -a <your-app>` — the `-a` override is required.** `fly.toml`
+deliberately carries a **generic placeholder** `app = "chatapp"` so this repo
+isn't tied to anyone's Fly account (it's a public template). But Fly app names
+are **globally unique**, so your real app has a different name. `fly deploy` reads
+the app from `fly.toml` unless you pass `-a`, which overrides it — so always
+target your real app explicitly:
+
+```bash
+fly deploy -a <your-app>          # -a overrides the placeholder app in fly.toml
+```
+
+(Editing the placeholder in `fly.toml` would work too, but keep that change local
+— don't commit your personal app name back into the template.)
+
+One-time setup before the first deploy: `fly apps create <your-app>`, a Postgres
+(`fly postgres create … && fly postgres attach … -a <your-app>` → sets
+`DATABASE_URL`), then the rest of the secrets via `fly secrets set`/`import`
+(`APP_BASE_URL` = your `https://…fly.dev` origin so email links + Secure cookies
+are right; `RESEND_API_KEY` + `MAIL_FROM`; optionally a bot key and the `VAPID_*`
+keypair). `release_command` migrations need `DATABASE_URL` set **before** that
+first deploy.
