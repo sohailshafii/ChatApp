@@ -2,7 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- interactive-widget=resizes-content: on supporting mobile browsers the
+         soft keyboard shrinks the layout viewport, so the full-height app fits
+         above it and the composer stays pinned (rather than sitting behind the
+         keyboard). Harmless where unsupported (e.g. iOS Safari handles it via
+         its own scroll-into-view). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+    />
     <title>ChatApp</title>
     <script>
       // Apply the saved theme before first paint to avoid a flash. 'system'

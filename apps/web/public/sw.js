@@ -18,11 +18,31 @@ self.addEventListener('push', (event) => {
   const url = conversationId ? '/conversations/' + conversationId : '/';
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      tag: conversationId || undefined,
-      data: { url },
-    }),
+    (async () => {
+      // Don't double-notify the conversation you're already reading: if a
+      // visible tab is on this conversation, the in-app live view (and badge)
+      // already surface the message, so suppress the OS notification. Mirrors
+      // the in-tab notifier, which skips the focused+visible conversation. The
+      // server pushes to every device and can't know which chat is open, so
+      // this decision has to live here. Other conversations still notify.
+      if (conversationId) {
+        const clients = await self.clients.matchAll({
+          type: 'window',
+          includeUncontrolled: true,
+        });
+        const target = '/conversations/' + conversationId;
+        const beingViewed = clients.some(
+          (c) => c.visibilityState === 'visible' && new URL(c.url).pathname === target,
+        );
+        if (beingViewed) return;
+      }
+
+      await self.registration.showNotification(title, {
+        body,
+        tag: conversationId || undefined,
+        data: { url },
+      });
+    })(),
   );
 });
 
