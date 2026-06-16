@@ -2,6 +2,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { sweepExpiredSessions } from './sessions.js';
 import { sweepExpiredDataExports } from './data-export.js';
 import { sweepOldAuditEvents } from './audit.js';
+import { sweepExpiredInvites } from './invites.js';
 
 // Periodic retention cleanup (§6/§7) — the "delete" half of every expiry policy.
 // Each task prunes one table whose rows the rest of the app already treats as
@@ -9,6 +10,7 @@ import { sweepOldAuditEvents } from './audit.js';
 //   - expired sessions (past the 30-day sliding window; touchSession rejects them)
 //   - expired data exports (past the 24h download link; PII at rest)
 //   - old audit events (past AUDIT_RETENTION_DAYS, ~180d)
+//   - dead invites (expired-unaccepted, or accepted over 30 days ago)
 //
 // Started only from the entrypoint (index.ts), never from buildApp(), so tests
 // don't spin up a timer. In-process and per-machine: each machine runs its own
@@ -23,6 +25,7 @@ export const RETENTION_TASKS: readonly SweepTask[] = [
   { name: 'sessions', sweep: sweepExpiredSessions },
   { name: 'data_exports', sweep: sweepExpiredDataExports },
   { name: 'auth_audit_log', sweep: sweepOldAuditEvents },
+  { name: 'invites', sweep: sweepExpiredInvites },
 ];
 
 type Options = {

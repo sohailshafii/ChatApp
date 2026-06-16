@@ -15,6 +15,7 @@ import {
   LOGIN_BACKOFF,
 } from '../rate-limit/auth-rate-limit.js';
 import { buildExport } from '../auth/data-export.js';
+import { setInviteOnly, createInvite } from '../auth/invites.js';
 
 // Exercises the §1 auth flow end-to-end against the dedicated test database
 // (provisioned in global-setup) — the curl flow from apps/server/CLAUDE.md,
@@ -40,10 +41,11 @@ afterAll(async () => {
 
 afterEach(async () => {
   await query(
-    'TRUNCATE accounts, sessions, email_verification_tokens, password_reset_tokens, conversations RESTART IDENTITY CASCADE',
+    'TRUNCATE accounts, sessions, email_verification_tokens, password_reset_tokens, conversations, invites RESTART IDENTITY CASCADE',
   );
   authLimiter.reset(); // keep rate-limit windows from leaking across tests
   loginBackoff.reset(); // and login-failure lockouts
+  setInviteOnly(undefined); // default gate off; invite-only tests opt in
 });
 
 function getCookie(res: InjectResponse, name: string) {
@@ -956,5 +958,62 @@ describe('auth rate limiting (§6)', () => {
       });
       expect(bad.statusCode).toBe(401);
     }
+  });
+});
+
+describe('invite-only signup (§1 gating)', () => {
+  it('rejects an uninvited email with invite_required (403)', async () => {
+    setInviteOnly(true);
+    const res = await signup('zoe', 'zoe@example.com');
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe('invite_required');
+
+    // No account was created.
+    const { rowCount } = await query(
+      'SELECT 1 FROM accounts WHERE username = $1',
+      ['zoe'],
+    );
+    expect(rowCount).toBe(0);
+  });
+
+  it('allows an invited email and consumes the invite', async () => {
+    setInviteOnly(true);
+    await createInvite('zoe@example.com');
+
+    const res = await signup('zoe', 'zoe@example.com');
+    expect(res.statusCode).toBe(200);
+
+    // Account created…
+    const account = await query<{ id: string }>(
+      'SELECT id FROM accounts WHERE username = $1',
+      ['zoe'],
+    );
+    expect(account.rowCount).toBe(1);
+
+    // …and the invite is now accepted (consumed).
+    const invite = await query<{ accepted_account_id: string | null }>(
+      'SELECT accepted_account_id FROM invites WHERE email = $1',
+      ['zoe@example.com'],
+    );
+    expect(invite.rows[0]!.accepted_account_id).toBe(account.rows[0]!.id);
+
+    // A second signup on the same (now-consumed) invite is rejected.
+    const again = await signup('zoe2', 'zoe@example.com');
+    // email_taken would also apply, but the invite gate fires first.
+    expect(again.statusCode).toBe(403);
+    expect(again.json().error.code).toBe('invite_required');
+  });
+
+  it('matches the invite case-insensitively', async () => {
+    setInviteOnly(true);
+    await createInvite('Mixed@Example.com');
+    const res = await signup('mix', 'mixed@example.com');
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('leaves signup open when the gate is off', async () => {
+    setInviteOnly(false);
+    const res = await signup('open', 'open@example.com');
+    expect(res.statusCode).toBe(200);
   });
 });

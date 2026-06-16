@@ -43,6 +43,7 @@ import {
   sendBackoff,
 } from '../rate-limit/auth-rate-limit.js';
 import { recordAuthEvent } from '../auth/audit.js';
+import { isInviteOnly, hasPendingInvite, consumeInvite } from '../auth/invites.js';
 import { deleteAccount } from '../auth/account.js';
 import { enqueueExport } from '../auth/data-export.js';
 import { hub } from '../ws/hub.js';
@@ -94,6 +95,18 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       return reply;
     }
 
+    // Invite-only gating (§1): reject uninvited emails before the expensive
+    // password hash. The invite is consumed atomically inside the transaction
+    // below — this is just a fast pre-check for the common rejection path.
+    const inviteOnly = isInviteOnly();
+    if (inviteOnly && !(await hasPendingInvite(email))) {
+      return sendError(
+        reply,
+        'invite_required',
+        'You need an invitation to sign up.',
+      );
+    }
+
     // Hash before opening a transaction — argon2 is ~250ms and shouldn't hold a
     // DB connection. Persist the account and its verification token atomically.
     const passwordHash = await hashPassword(password);
@@ -117,6 +130,17 @@ export function registerAuthRoutes(app: FastifyInstance): void {
          VALUES ($1, $2, $3)`,
         [token.hash, accountId, expiresAt],
       );
+
+      // Claim the invite atomically with account creation (re-checks the
+      // pre-check above against a concurrent signup that consumed it first).
+      if (inviteOnly && !(await consumeInvite(client, email, accountId))) {
+        await client.query('ROLLBACK');
+        return sendError(
+          reply,
+          'invite_required',
+          'You need an invitation to sign up.',
+        );
+      }
 
       await client.query('COMMIT');
     } catch (err) {

@@ -17,6 +17,7 @@ function config(overrides: Partial<Config>): Config {
     databaseUrl: 'postgres://x',
     appBaseUrl: 'http://localhost:5173',
     webDistDir: undefined,
+    inviteOnly: false,
     resendApiKey: undefined,
     mailFrom: 'onboarding@resend.dev',
     botProvider: 'anthropic',
