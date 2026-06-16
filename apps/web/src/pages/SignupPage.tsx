@@ -4,6 +4,7 @@ import { passwordRequirements, signupRequestSchema } from '@chatapp/shared';
 import { ApiError } from '../api/client';
 import { signup } from '../api/auth';
 import { Field } from '../components/Field';
+import { reportAbuseMailto } from '../lib/support';
 
 type FieldName = 'username' | 'email' | 'password';
 type FieldErrors = Partial<Record<FieldName, string>>;
@@ -163,6 +164,13 @@ export function SignupPage() {
             </span>
           )}
         </div>
+
+        <p className="form-fineprint">
+          By creating an account you agree to use ChatApp respectfully:
+          harassment, illegal content, and spam are not allowed and may get your
+          account suspended. You can{' '}
+          <a href={reportAbuseMailto}>report abuse</a> at any time.
+        </p>
 
         <button type="submit" className="btn-primary" disabled={submitting}>
           {submitting ? 'Creating account…' : 'Create account'}

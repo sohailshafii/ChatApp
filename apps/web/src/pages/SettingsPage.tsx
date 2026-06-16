@@ -4,6 +4,7 @@ import { ApiError } from '../api/client';
 import { deleteAccount, requestDataExport } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
 import { Field } from '../components/Field';
+import { reportAbuseMailto } from '../lib/support';
 import { NotificationsSettings } from '../notifications/NotificationsSettings';
 
 // Account settings (§6): account summary, data export, and the delete-account
@@ -103,6 +104,20 @@ export function SettingsPage() {
             </button>
           </>
         )}
+      </section>
+
+      <section aria-labelledby="safety-heading">
+        <h2 id="safety-heading">Safety &amp; reporting</h2>
+        <p>
+          Harassment, illegal content, and spam aren’t allowed. If someone is
+          abusing ChatApp, email us with their username and what happened and
+          we’ll take a look.
+        </p>
+        <p>
+          <a className="btn-secondary" href={reportAbuseMailto}>
+            Report abuse
+          </a>
+        </p>
       </section>
 
       <section className="danger-zone" aria-labelledby="delete-heading">

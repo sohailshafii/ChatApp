@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { BetaNotice } from './BetaNotice';
 import { NotificationPrompt } from '../notifications/NotificationPrompt';
 import { ThemeToggle } from '../theme/ThemeToggle';
 
@@ -60,6 +61,7 @@ export function Layout() {
       <a href="#main" className="skip-link">
         Skip to content
       </a>
+      <BetaNotice />
       <header className="app-header">
         <Link to="/" className="app-logo">
           ChatApp
