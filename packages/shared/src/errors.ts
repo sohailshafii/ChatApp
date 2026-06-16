@@ -8,6 +8,7 @@ export const errorCodeSchema = z.enum([
   'invalid_credentials',
   'username_taken',
   'email_taken',
+  'invite_required',
   'rate_limited',
   'not_found',
   'unverified',

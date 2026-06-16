@@ -79,6 +79,33 @@ curl -i -X POST http://localhost:8080/api/auth/signup \
 #   reused username            -> username_taken
 #   reused email (case-insensitive, via citext) -> email_taken
 #   short/invalid username, missing fields       -> validation_error
+#   uninvited email when INVITE_ONLY=true        -> invite_required (403)
+```
+
+#### Invite-only signup (§1 gating)
+
+Signup is **open by default**. Set **`INVITE_ONLY=true`** (env / Fly secret) to
+gate it: `POST /auth/signup` then requires a pending **email-bound invite**
+matching the submitted email, else **403 `invite_required`** (checked before the
+password hash; re-checked + consumed atomically in the account-creation txn).
+Email verification still proves the recipient owns the address — the invite is
+the *who-may-join* gate. Backing table `invites` (migration 012, `email` citext
+UNIQUE, `expires_at`, `accepted_at`/`accepted_account_id ON DELETE SET NULL`);
+`src/auth/invites.ts` (`createInvite` idempotent per email via `ON CONFLICT` —
+re-inviting refreshes expiry + re-opens; `hasPendingInvite`, `consumeInvite`,
+`sweepExpiredInvites` wired into the retention sweeper). `setInviteOnly()` is the
+test seam.
+
+Operators mint invites with the **CLI** (no admin endpoint/role): from
+`apps/server`, `npm run invite -- alice@example.com [--days N]` (default 14-day
+expiry) inserts/refreshes the invite, emails the recipient a `/signup` link
+(logged in dev when `RESEND_API_KEY` is unset, like the other mailers), and
+prints the link + expiry. Run locally against the dev DB, or in prod via
+`fly ssh console` (DATABASE_URL is already in the machine env). The recipient
+must sign up with that **exact** email.
+
+```bash
+npm run invite -w @chatapp/server -- alice@example.com --days 30
 ```
 
 When `RESEND_API_KEY` is unset, signup **logs** the verification link instead of

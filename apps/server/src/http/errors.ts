@@ -12,6 +12,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   not_found: 404,
   username_taken: 409,
   email_taken: 409,
+  invite_required: 403,
   invalid_token: 400,
   expired_token: 410,
   rate_limited: 429,

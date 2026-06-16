@@ -24,6 +24,16 @@ const envSchema = z.object({
   // static serving entirely. See src/static.ts.
   WEB_DIST_DIR: z.string().optional(),
 
+  // Invite-only signup (§1 access gating). When enabled, POST /auth/signup
+  // requires a pending invite matching the submitted email; uninvited signups
+  // get `invite_required`. Off by default (open signup) so the template runs
+  // out of the box; operators set INVITE_ONLY=true (env / Fly secret) and mint
+  // invites with `npm run invite`. Accepts only "true"/"1" as true.
+  INVITE_ONLY: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true' || v === '1'),
+
   // Optional in dev: when unset, verification emails are logged instead of sent.
   RESEND_API_KEY: z.string().optional(),
   // The From address on outgoing mail. Resend only accepts a sender on a domain
@@ -69,6 +79,7 @@ export type Config = {
   databaseUrl: string;
   appBaseUrl: string;
   webDistDir: string | undefined;
+  inviteOnly: boolean;
   resendApiKey: string | undefined;
   mailFrom: string;
   botProvider: z.infer<typeof envSchema>['BOT_PROVIDER'];
@@ -110,6 +121,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: e.DATABASE_URL,
     appBaseUrl: e.APP_BASE_URL,
     webDistDir: e.WEB_DIST_DIR,
+    inviteOnly: e.INVITE_ONLY,
     resendApiKey: e.RESEND_API_KEY,
     mailFrom: e.MAIL_FROM,
     botProvider: e.BOT_PROVIDER,
