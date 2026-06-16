@@ -210,6 +210,40 @@ input[type='checkbox'] {
   flex-shrink: 0;
 }
 
+/* Public test-deployment banner (dismissible). Sits above the header. */
+.beta-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
+}
+
+.beta-notice-text {
+  margin: 0;
+  flex: 1;
+  line-height: 1.45;
+}
+
+.beta-notice-dismiss {
+  flex-shrink: 0;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.beta-notice-dismiss:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
 .btn-link {
   padding: 0;
   font: inherit;
@@ -843,6 +877,38 @@ a.btn-primary {
 .btn-primary:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+/* Lower-emphasis action (e.g. "Report abuse" in Settings). Also styleable as an
+   anchor so a mailto: link reads as a button. */
+.btn-secondary,
+a.btn-secondary {
+  display: inline-block;
+  padding: 0.55rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  color: var(--text);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.btn-secondary:hover,
+a.btn-secondary:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+/* Small print under a form (e.g. the signup acceptable-use note). */
+.form-fineprint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 /* Account settings (§6) */
