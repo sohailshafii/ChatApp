@@ -108,6 +108,20 @@ must sign up with that **exact** email.
 npm run invite -w @chatapp/server -- alice@example.com --days 30
 ```
 
+**Testing the gate locally** (no mail provider needed):
+
+```bash
+# 1. Turn the gate on (in the repo-root .env, then restart the dev server):
+echo 'INVITE_ONLY=true' >> .env && npm run dev:server
+
+# 2. Mint an invite. With RESEND_API_KEY unset the link is logged, not emailed —
+#    the CLI also prints it ("Signup link: …/signup?email=…"):
+npm run invite -w @chatapp/server -- you@example.com
+
+# 3. Open that /signup?email=… link and sign up with that exact email. An
+#    uninvited email instead gets 403 invite_required.
+```
+
 When `RESEND_API_KEY` is unset, signup **logs** the verification link instead of
 emailing it — grep the server output for `verification link logged for dev` to
 copy the `?token=…` URL. When it **is** set, all three mailers (verification,
