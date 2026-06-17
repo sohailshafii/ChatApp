@@ -248,7 +248,9 @@ export function ConversationPage() {
           {isBot && (
             <p className="bot-disclaimer">
               This is a bot powered by a large language model. It is not a real
-              person and shouldn’t be treated as one.
+              person and shouldn’t be treated as one. Its responses are generated
+              and may be inaccurate, offensive, or otherwise unreliable — we are
+              not responsible for anything it says.
             </p>
           )}
         </div>

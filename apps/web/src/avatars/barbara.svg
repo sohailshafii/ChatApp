@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Barbara">
+  <rect width="100" height="100" fill="#b08fb0"/>
+  <!-- high-collar prairie dress / shoulders -->
+  <path d="M14 100c0-19 16-30 36-30s36 11 36 30z" fill="#6b5066"/>
+  <!-- lace collar -->
+  <path d="M38 74q12 9 24 0l-3 9q-9 5-18 0z" fill="#e7dde6"/>
+  <!-- ears -->
+  <circle cx="30" cy="51" r="4.5" fill="#e6b48a"/>
+  <circle cx="70" cy="51" r="4.5" fill="#e6b48a"/>
+  <!-- neck -->
+  <rect x="43" y="61" width="14" height="14" rx="5" fill="#e6b48a"/>
+  <!-- head -->
+  <circle cx="50" cy="50" r="20" fill="#f2c69a"/>
+  <!-- silver hair, parted and pulled back -->
+  <path d="M28 50C26 31 36 26 50 26s24 5 22 24c0-11-8-15-22-15s-20 4-22 15z" fill="#d7d9dc"/>
+  <!-- top bun -->
+  <circle cx="50" cy="22" r="9" fill="#d7d9dc"/>
+  <!-- round spectacles -->
+  <circle cx="42" cy="52" r="6" fill="none" stroke="#5a5a5a" stroke-width="1.6"/>
+  <circle cx="58" cy="52" r="6" fill="none" stroke="#5a5a5a" stroke-width="1.6"/>
+  <path d="M48 52h4" stroke="#5a5a5a" stroke-width="1.6"/>
+  <!-- eyes -->
+  <circle cx="42" cy="52" r="2.3" fill="#392d25"/>
+  <circle cx="58" cy="52" r="2.3" fill="#392d25"/>
+  <!-- rosy cheeks -->
+  <circle cx="35" cy="58" r="3.4" fill="#e8a08a" opacity="0.6"/>
+  <circle cx="65" cy="58" r="3.4" fill="#e8a08a" opacity="0.6"/>
+  <!-- nose -->
+  <path d="M50 54v4l-2.5 1.4" fill="none" stroke="#d79f72" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- gentle smile -->
+  <path d="M43 64q7 5 14 0" fill="none" stroke="#9c5b3f" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

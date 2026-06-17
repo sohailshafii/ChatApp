@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Big Mike">
+  <rect width="100" height="100" fill="#3f9b54"/>
+  <!-- broad shoulders / team jersey -->
+  <path d="M10 100c0-21 18-32 40-32s40 11 40 32z" fill="#214a8c"/>
+  <!-- jersey collar -->
+  <path d="M40 70q10 7 20 0l-4 8q-6 4-12 0z" fill="#1a3a70"/>
+  <!-- ears -->
+  <circle cx="29" cy="50" r="4.8" fill="#d99a66"/>
+  <circle cx="71" cy="50" r="4.8" fill="#d99a66"/>
+  <!-- neck -->
+  <rect x="42" y="60" width="16" height="15" rx="5" fill="#d99a66"/>
+  <!-- head -->
+  <circle cx="50" cy="49" r="22" fill="#e9b884"/>
+  <!-- stubble shading along the jaw -->
+  <path d="M30 52a20 20 0 0 0 40 0 20 20 0 0 1-40 0z" fill="#c79a6a" opacity="0.45"/>
+  <!-- brows -->
+  <rect x="35" y="44" width="11" height="3" rx="1.5" fill="#4b3a2a"/>
+  <rect x="54" y="44" width="11" height="3" rx="1.5" fill="#4b3a2a"/>
+  <!-- eyes -->
+  <circle cx="42" cy="50" r="2.7" fill="#392d25"/>
+  <circle cx="58" cy="50" r="2.7" fill="#392d25"/>
+  <!-- nose -->
+  <path d="M50 52v6l-3 1.6" fill="none" stroke="#c4895c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- big grin with teeth -->
+  <path d="M39 62q11 10 22 0z" fill="#fff"/>
+  <path d="M39 62q11 10 22 0" fill="none" stroke="#8a4a32" stroke-width="2.2" stroke-linecap="round"/>
+  <!-- goatee -->
+  <path d="M44 69q6 5 12 0l-2 6q-4 3-8 0z" fill="#4b3a2a"/>
+  <!-- backwards ball cap: band across forehead + crown behind + button -->
+  <path d="M28 38C28 21 37 15 50 15s22 6 22 23q-11-7-22-7t-22 7z" fill="#cc3b34"/>
+  <rect x="28" y="33" width="44" height="6" rx="3" fill="#fff"/>
+  <circle cx="50" cy="16" r="2.6" fill="#a82e28"/>
+</svg>
