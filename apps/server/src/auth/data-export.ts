@@ -32,15 +32,32 @@ type MsgRow = {
 };
 
 // Readable peer for the archive — bot by name, human by username, with the same
-// "Deleted user" fallback as the live conversation views (§4).
+// "Deleted user" fallback as the live conversation views (§4). Deliberately omits
+// the peer's internal account UUID: it is meaningless to the reader and is another
+// person's identifier (data minimization, §6). The username is the meaningful,
+// already-known handle.
 function exportPeer(row: ConvRow): Record<string, string> {
   if (row.bot_id) {
-    return { kind: 'bot', id: row.bot_id, name: getBot(row.bot_id)?.name ?? row.bot_id };
+    return { kind: 'bot', name: getBot(row.bot_id)?.name ?? row.bot_id };
   }
   if (row.peer_account_id == null) {
     return { kind: 'human', username: 'Deleted user' };
   }
-  return { kind: 'human', id: row.peer_account_id, username: row.peer_username! };
+  return { kind: 'human', username: row.peer_username! };
+}
+
+// Human-readable label for a message sender — never the raw account UUID. The
+// caller's own messages are "you"; the peer is their username; a bot is its name;
+// a since-deleted peer falls back to "Deleted user".
+function senderLabel(conv: ConvRow, senderId: string, selfId: string): string {
+  if (senderId === selfId) return 'you';
+  if (conv.bot_id && senderId === conv.bot_id) {
+    return getBot(conv.bot_id)?.name ?? conv.bot_id;
+  }
+  if (conv.peer_account_id && senderId === conv.peer_account_id) {
+    return conv.peer_username!;
+  }
+  return 'Deleted user';
 }
 
 // Assembles the caller's full export document.
@@ -74,14 +91,17 @@ export async function buildExport(accountId: string): Promise<unknown> {
     [accountId],
   );
 
+  const convById = new Map(convRows.map((c) => [c.id, c]));
   const byConv = new Map<
     string,
-    { senderId: string; content: string; createdAt: string }[]
+    { sender: string; content: string; createdAt: string }[]
   >();
   for (const m of msgRows) {
+    const conv = convById.get(m.conversation_id);
     const list = byConv.get(m.conversation_id) ?? [];
     list.push({
-      senderId: m.sender_id,
+      // Human-readable sender, never the raw account UUID (data minimization, §6).
+      sender: conv ? senderLabel(conv, m.sender_id, accountId) : 'Deleted user',
       content: m.content,
       createdAt: m.created_at.toISOString(),
     });

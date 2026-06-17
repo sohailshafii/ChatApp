@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
 import { query, closePool } from '../db/pool.js';
-import { enqueueExport, processPendingExports } from './data-export.js';
+import { buildExport, enqueueExport, processPendingExports } from './data-export.js';
 
 // warn is used by sendDataExportEmail when RESEND_API_KEY is unset (the test env).
 const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as FastifyBaseLogger;
@@ -74,5 +74,73 @@ describe('data export jobs', () => {
       [accountId],
     );
     expect(rows[0]!.n).toBe(1); // one still pending
+  });
+});
+
+describe('buildExport content', () => {
+  async function makeAccount(username: string): Promise<string> {
+    const { rows } = await query<{ id: string }>(
+      `INSERT INTO accounts (username, email, password_hash, verified)
+       VALUES ($1, $2, 'x', true) RETURNING id`,
+      [username, `${username}@example.com`],
+    );
+    return rows[0]!.id;
+  }
+  async function makeConversation(botId: string | null): Promise<string> {
+    const { rows } = await query<{ id: string }>(
+      'INSERT INTO conversations (bot_id) VALUES ($1) RETURNING id',
+      [botId],
+    );
+    return rows[0]!.id;
+  }
+  async function addParticipant(convId: string, acct: string): Promise<void> {
+    await query(
+      'INSERT INTO conversation_participants (conversation_id, account_id) VALUES ($1, $2)',
+      [convId, acct],
+    );
+  }
+  async function addMessage(convId: string, senderId: string, content: string): Promise<void> {
+    await query(
+      'INSERT INTO messages (conversation_id, sender_id, content) VALUES ($1, $2, $3)',
+      [convId, senderId, content],
+    );
+  }
+
+  it('omits peer account UUIDs and labels senders by name', async () => {
+    const peerId = await makeAccount('peer');
+
+    // Human conversation: one message each way.
+    const humanConv = await makeConversation(null);
+    await addParticipant(humanConv, accountId);
+    await addParticipant(humanConv, peerId);
+    await addMessage(humanConv, accountId, 'hi peer');
+    await addMessage(humanConv, peerId, 'hi exporter');
+
+    // Bot conversation: the user and the Smith bot.
+    const botConv = await makeConversation('smith');
+    await addParticipant(botConv, accountId);
+    await addMessage(botConv, accountId, 'hello bot');
+    await addMessage(botConv, 'smith', 'cor blimey, guv');
+
+    const archive = (await buildExport(accountId)) as {
+      conversations: {
+        peer: Record<string, string>;
+        messages: { sender: string; content: string }[];
+      }[];
+    };
+
+    // No internal account UUIDs anywhere in the serialized export.
+    const json = JSON.stringify(archive);
+    expect(json).not.toContain(accountId);
+    expect(json).not.toContain(peerId);
+
+    const human = archive.conversations.find((c) => c.peer.kind === 'human')!;
+    expect(human.peer).toEqual({ kind: 'human', username: 'peer' });
+    expect(human.peer).not.toHaveProperty('id');
+    expect(human.messages.map((m) => m.sender)).toEqual(['you', 'peer']);
+
+    const bot = archive.conversations.find((c) => c.peer.kind === 'bot')!;
+    expect(bot.peer).toEqual({ kind: 'bot', name: 'Smith' });
+    expect(bot.messages.map((m) => m.sender)).toEqual(['you', 'Smith']);
   });
 });
