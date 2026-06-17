@@ -100,9 +100,9 @@ Operators mint invites with the **CLI** (no admin endpoint/role): from
 `apps/server`, `npm run invite -- alice@example.com [--days N]` (default 14-day
 expiry) inserts/refreshes the invite, emails the recipient a `/signup` link
 (logged in dev when `RESEND_API_KEY` is unset, like the other mailers), and
-prints the link + expiry. Run locally against the dev DB, or in prod via
-`fly ssh console` (DATABASE_URL is already in the machine env). The recipient
-must sign up with that **exact** email.
+prints the link + expiry. The recipient must sign up with that **exact** email.
+Run locally against the dev DB (below), or in **production** via `fly ssh
+console` (see "Minting a production invite").
 
 ```bash
 npm run invite -w @chatapp/server -- alice@example.com --days 30
@@ -120,6 +120,34 @@ npm run invite -w @chatapp/server -- you@example.com
 
 # 3. Open that /signup?email=… link and sign up with that exact email. An
 #    uninvited email instead gets 403 invite_required.
+```
+
+**Minting a production invite.** The `npm run invite` wrapper uses `tsx` + `src/`,
+neither of which ship in the runtime image — so don't run it via `fly ssh`.
+Instead esbuild bundles the CLI to **`dist/scripts/invite.js`** (a third entry
+point alongside `index.js` and `db/migrate.js`), run with plain `node`. On the
+Fly machine `DATABASE_URL`, `APP_BASE_URL`, and `RESEND_API_KEY` are already in
+the env, so the invite is written to the prod DB, the link uses the live origin,
+and the email actually sends:
+
+```bash
+fly ssh console -a <your-app> \
+  -C "node /app/apps/server/dist/scripts/invite.js alice@example.com --days 30"
+```
+
+⚠️ Running the CLI **locally** writes to your **local** dev DB and (with
+`APP_BASE_URL` unset) builds a `http://localhost:5173` link — useless for the
+live site. Always mint prod invites on the machine (above), or override both
+`DATABASE_URL` and `APP_BASE_URL` to the prod values. The gate is an email match
+(no token in the link), so a row inserted by hand works too:
+
+```sql
+-- fly postgres connect -a <your-db-app>
+INSERT INTO invites (email, expires_at)
+VALUES ('alice@example.com', now() + interval '14 days')
+ON CONFLICT (email) DO UPDATE
+  SET expires_at = EXCLUDED.expires_at, accepted_at = NULL, accepted_account_id = NULL;
+-- then hand out: https://<your-app>.fly.dev/signup?email=alice%40example.com
 ```
 
 When `RESEND_API_KEY` is unset, signup **logs** the verification link instead of

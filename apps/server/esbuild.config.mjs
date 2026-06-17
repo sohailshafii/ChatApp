@@ -7,8 +7,10 @@
 // `zod`) — into the output, while leaving real npm dependencies external so they
 // resolve from `node_modules` at runtime (no native rebuilds, smaller bundle).
 //
-// Two entry points keep the original `dist` layout: `dist/index.js` (server) and
-// `dist/db/migrate.js` (the migration runner invoked by Fly's release command).
+// Three entry points keep the original `dist` layout: `dist/index.js` (server),
+// `dist/db/migrate.js` (the migration runner invoked by Fly's release command),
+// and `dist/scripts/invite.js` (the invite CLI, so it can be run in prod via
+// `fly ssh console` — `tsx`/`src` are not in the runtime image).
 
 import { build } from 'esbuild';
 import { cpSync, readFileSync, rmSync } from 'node:fs';
@@ -31,7 +33,7 @@ const external = Object.keys(pkg.dependencies).filter(
 );
 
 await build({
-  entryPoints: ['src/index.ts', 'src/db/migrate.ts'],
+  entryPoints: ['src/index.ts', 'src/db/migrate.ts', 'src/scripts/invite.ts'],
   outdir: 'dist',
   bundle: true,
   platform: 'node',
