@@ -16,7 +16,7 @@ export async function sendInviteEmail(
   email: string,
 ): Promise<void> {
   const { appBaseUrl, resendApiKey, mailFrom } = loadConfig();
-  const link = `${appBaseUrl}${SIGNUP_PATH}`;
+  const link = `${appBaseUrl}${SIGNUP_PATH}?email=${encodeURIComponent(email)}`;
 
   if (!resendApiKey) {
     log.warn(
