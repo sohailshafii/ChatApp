@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Smith">
+  <rect width="100" height="100" fill="#6d8a94"/>
+  <!-- coat / shoulders -->
+  <path d="M14 100c0-19 16-30 36-30s36 11 36 30z" fill="#3c4656"/>
+  <!-- ears -->
+  <circle cx="30" cy="52" r="4.5" fill="#dca676"/>
+  <circle cx="70" cy="52" r="4.5" fill="#dca676"/>
+  <!-- neck -->
+  <rect x="43" y="62" width="14" height="14" rx="5" fill="#dca676"/>
+  <!-- head -->
+  <circle cx="50" cy="52" r="20" fill="#ebba89"/>
+  <!-- brows -->
+  <rect x="37" y="48" width="10" height="2.6" rx="1.3" fill="#5b4636"/>
+  <rect x="53" y="48" width="10" height="2.6" rx="1.3" fill="#5b4636"/>
+  <!-- eyes -->
+  <circle cx="42" cy="54" r="2.5" fill="#392d25"/>
+  <circle cx="58" cy="54" r="2.5" fill="#392d25"/>
+  <!-- nose -->
+  <path d="M50 56v5l-3 1.6" fill="none" stroke="#cf9263" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- smile -->
+  <path d="M42 66q8 5.5 16 0" fill="none" stroke="#9c5b3f" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- fedora: brim, crown, band, pinch -->
+  <ellipse cx="50" cy="33" rx="33" ry="7" fill="#332f37"/>
+  <path d="M33 34C33 16 40 11 50 11s17 5 17 23z" fill="#423c48"/>
+  <rect x="33" y="28" width="34" height="5" fill="#2b2730"/>
+  <path d="M43 15q7-3 14 0" fill="none" stroke="#2b2730" stroke-width="2" stroke-linecap="round"/>
+</svg>
