@@ -8,7 +8,8 @@
 #
 # Brings up Postgres, applies migrations, generates VAPID keys into .env if
 # absent, and starts the dev server if one isn't already on :8080 (stopping it
-# again on exit). Postgres is left running.
+# again on exit). Postgres is left running. Mints an invite for its throwaway
+# account so it passes whether or not INVITE_ONLY is enabled (#90).
 #
 # IMPORTANT: run from a working tree on the LATEST main (the endpoints must
 # exist) and after `npm install` (the server's web-push dep). 404s almost always
@@ -81,6 +82,17 @@ echo "==> Flow (a throwaway account)"
 TS="$(date +%s)"
 UN="e2e_$TS"; EM="e2e_$TS@example.com"; PW="verifyPass123"
 SUB_ENDPOINT="https://fcm.googleapis.com/fcm/send/e2e-$TS"
+
+# Invite-only gate (#90): when INVITE_ONLY=true (the prod posture, and now the
+# .env default) signup requires a pending invite for the exact email. Mint one
+# for the throwaway address via the server's invite CLI so the flow passes
+# regardless of the gate — an unused invite is harmless when it's off. Done
+# against the DB, so it also works when reusing an already-running server.
+if npm run invite --workspace=@chatapp/server -- "$EM" >/dev/null 2>&1; then
+  ok "invite minted (invite-gate safe)"
+else
+  bad "invite mint failed (signup will 403 if INVITE_ONLY=true)"
+fi
 
 code=$(http_code -X POST "$BASE/auth/signup" -H "Content-Type:application/json" -H "Origin:$ORG" \
   -d "{\"username\":\"$UN\",\"email\":\"$EM\",\"password\":\"$PW\"}")

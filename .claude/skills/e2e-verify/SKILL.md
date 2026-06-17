@@ -29,7 +29,12 @@ absent, starts the dev server if one isn't already on `:8080` (and stops that
 one on exit), runs the checks, and prints `==> Result: N passed, M failed`.
 Exit 0 = all passed. **Postgres is left running** for the server agent.
 
+**Invite-only safe (#90):** the script mints an invite for its throwaway email
+before signup, so it passes whether or not `INVITE_ONLY` is enabled (it's the
+prod posture and now the `.env` default). No manual override needed.
+
 ## What it checks
+- mints an invite for the throwaway email (invite-only gate, #90)
 - signup → verify (DB flip) → login (session cookie + CSRF issued)
 - `GET /push/vapid-public-key` returns a key
 - `POST /push/subscriptions` → 200, `DELETE /push/subscriptions` → 204
