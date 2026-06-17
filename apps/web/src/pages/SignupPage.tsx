@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { passwordRequirements, signupRequestSchema } from '@chatapp/shared';
 import { ApiError } from '../api/client';
 import { signup } from '../api/auth';
@@ -16,11 +16,15 @@ function isFieldName(value: unknown): value is FieldName {
 }
 
 export function SignupPage() {
-  const [values, setValues] = useState<Record<FieldName, string>>({
+  // Invite emails link to /signup?email=<address>. Seed the email field from it
+  // so an invitee doesn't have to retype the exact address the invite-only gate
+  // is bound to. Read once on mount; the field stays editable.
+  const [searchParams] = useSearchParams();
+  const [values, setValues] = useState<Record<FieldName, string>>(() => ({
     username: '',
-    email: '',
+    email: searchParams.get('email') ?? '',
     password: '',
-  });
+  }));
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [ageError, setAgeError] = useState<string | null>(null);
