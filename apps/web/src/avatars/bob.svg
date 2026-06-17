@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Bob">
+  <rect width="100" height="100" fill="#b5673f"/>
+  <!-- mechanic overalls / shoulders -->
+  <path d="M14 100c0-19 16-30 36-30s36 11 36 30z" fill="#3f5e8c"/>
+  <!-- ears -->
+  <circle cx="29" cy="50" r="4.5" fill="#dca676"/>
+  <circle cx="71" cy="50" r="4.5" fill="#dca676"/>
+  <!-- neck -->
+  <rect x="43" y="60" width="14" height="14" rx="5" fill="#dca676"/>
+  <!-- head -->
+  <circle cx="50" cy="49" r="21" fill="#ebba89"/>
+  <!-- greying hair, receding -->
+  <path d="M29 49C27 33 35 28 50 28s23 5 21 21c0-9-7-13-21-13s-21 4-21 13z" fill="#b9bec4"/>
+  <!-- brows -->
+  <rect x="36" y="44" width="11" height="2.8" rx="1.4" fill="#9aa0a7"/>
+  <rect x="53" y="44" width="11" height="2.8" rx="1.4" fill="#9aa0a7"/>
+  <!-- eyes -->
+  <circle cx="42" cy="50" r="2.6" fill="#392d25"/>
+  <circle cx="58" cy="50" r="2.6" fill="#392d25"/>
+  <!-- nose -->
+  <path d="M50 52v6l-3 1.6" fill="none" stroke="#cf9263" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- big handlebar mustache -->
+  <path d="M50 62c-6-1-9-2-15 1-4 2-5 6-2 7 5 1 11-2 17-6 6 4 12 7 17 6 3-1 2-5-2-7-6-3-9-2-15-1z" fill="#c9ccd1"/>
+  <!-- mouth -->
+  <path d="M44 70q6 3 12 0" fill="none" stroke="#9c5b3f" stroke-width="2" stroke-linecap="round"/>
+</svg>
