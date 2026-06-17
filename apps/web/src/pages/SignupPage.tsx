@@ -197,6 +197,14 @@ function applySubmitError(
       case 'email_taken':
         setFieldErrors({ email: 'An account with this email already exists.' });
         return;
+      case 'invite_required':
+        // Invite-only signup (server INVITE_ONLY, 403). The gate is bound to the
+        // email, so note that the invited address must match — ask whoever
+        // invited you for a link otherwise.
+        setFormError(
+          'You need an invitation to sign up. Use the exact email address your invite was sent to, or ask the person who invited you for a link.',
+        );
+        return;
       case 'rate_limited':
         setFormError('Too many attempts. Please wait a moment and try again.');
         return;
