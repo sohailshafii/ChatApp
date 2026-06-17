@@ -36,3 +36,7 @@ npm run typecheck        # typecheck all workspaces
 - Wire-format types live in `packages/shared` so client and server can't drift.
 - Don't add ESLint, Prettier, test framework, or CI scaffolding speculatively — add when the first real need arises.
 - Per the spec, message content max is **20,000 characters** (REQUIREMENTS.md §3).
+- **PRs are squash-merged.** Each merged PR collapses to a single commit on `main`
+  (its individual commits are squashed away), so `main`'s history reads as one
+  entry per PR — a clean, reviewable changelog. Keep PRs focused and write a clear
+  PR title/description, since that becomes the permanent log entry.
