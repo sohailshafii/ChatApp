@@ -13,10 +13,17 @@ describe('bot registry', () => {
     expect(getBot('assistant')).not.toHaveProperty('systemPrompt');
   });
 
-  it('returns a per-bot persona prompt for a known bot', () => {
-    const prompt = systemPromptFor('assistant');
-    expect(prompt.length).toBeGreaterThan(0);
-    expect(prompt.toLowerCase()).toContain('lizardman');
+  it('includes the curated personas', () => {
+    const byId = new Map(listBots().map((bot) => [bot.id, bot]));
+    expect(byId.get('assistant')?.name).toBe('Grik');
+    expect(byId.get('smith')?.name).toBe('Smith');
+    expect(byId.get('bob')?.name).toBe('Bob');
+  });
+
+  it('returns a per-bot persona prompt for each known bot', () => {
+    expect(systemPromptFor('assistant').toLowerCase()).toContain('lizardman');
+    expect(systemPromptFor('smith').toLowerCase()).toContain('candy shop');
+    expect(systemPromptFor('bob').toLowerCase()).toContain('mechanic');
   });
 
   it('falls back to a generic prompt for an unknown bot', () => {
