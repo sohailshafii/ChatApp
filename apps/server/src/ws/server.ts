@@ -14,6 +14,7 @@ import { loadConfig } from '../config.js';
 import { touchSession } from '../auth/sessions.js';
 import { hub } from './hub.js';
 import { presence } from './presence.js';
+import { bus } from './bus.js';
 import {
   createMessage,
   getConversationParticipants,
@@ -172,22 +173,27 @@ async function handleSend(
   // A retried send was already fanned out on the first attempt — don't re-deliver.
   if (deduped) return;
 
-  // Fan out to every participant socket except the origin. Recipients didn't send
-  // it, so the broadcast message carries a null clientMessageId.
+  // Fan out to every participant socket except the origin, across all machines via
+  // the bus. Recipients didn't send it, so the broadcast carries a null
+  // clientMessageId. The origin socket is always local, so skipping it is handled
+  // by the local-delivery leg of publish().
   const broadcast: ServerWsMessage = {
     type: 'message',
     message: { ...message, clientMessageId: null },
   };
+  bus.publish(participants.accountIds, broadcast, ws);
+
+  // §3 delivery receipt: a human peer has a live socket somewhere on the fleet.
+  // Cross-machine we can't synchronously confirm the socket received the frame, so
+  // we use presence as the signal (at N=1 this equals "a peer socket got it").
   let deliveredToPeer = false;
   for (const account of participants.accountIds) {
-    for (const socket of hub.socketsForAccount(account)) {
-      if (socket === ws) continue;
-      sendFrame(socket, broadcast);
-      if (account !== accountId) deliveredToPeer = true;
+    if (account === accountId) continue;
+    if (await presence.online(account)) {
+      deliveredToPeer = true;
+      break;
     }
   }
-
-  // §3 delivery receipt: a human peer had at least one socket that received it.
   if (deliveredToPeer) {
     sendFrame(ws, { type: 'delivered', conversationId, messageId: message.id });
   }
