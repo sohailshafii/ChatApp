@@ -29,6 +29,12 @@ class ConnectionHub {
   socketsForAccount(accountId: string): ReadonlySet<WebSocket> {
     return this.byAccount.get(accountId) ?? EMPTY;
   }
+
+  // Accounts with at least one live socket on this machine — used by the presence
+  // heartbeat to refresh their cross-machine presence keys.
+  accountIds(): Iterable<string> {
+    return this.byAccount.keys();
+  }
 }
 
 export const hub = new ConnectionHub();

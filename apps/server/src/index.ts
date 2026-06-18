@@ -2,6 +2,7 @@ import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { closePool } from './db/pool.js';
 import { closeRedis, connectRedis } from './redis/client.js';
+import { startPresenceHeartbeat } from './ws/presence.js';
 import { startRetentionSweeper } from './auth/retention.js';
 import { startExportWorker } from './auth/export-worker.js';
 
@@ -26,9 +27,14 @@ async function main(): Promise<void> {
     // Connect the optional shared Redis (multi-machine scale-out); a no-op when
     // REDIS_URL is unset, non-fatal when it can't connect. See redis/client.ts.
     await connectRedis(app.log);
-    // Start background jobs once we're listening: retention cleanup (§6/§7) and
-    // the durable data-export worker (§6).
-    background.push(startRetentionSweeper(app.log), startExportWorker(app.log));
+    // Start background jobs once we're listening: retention cleanup (§6/§7), the
+    // durable data-export worker (§6), and the cross-machine presence heartbeat
+    // (no-op without REDIS_URL).
+    background.push(
+      startRetentionSweeper(app.log),
+      startExportWorker(app.log),
+      startPresenceHeartbeat(app.log),
+    );
   } catch (err) {
     app.log.error(err, 'failed to start server');
     process.exit(1);

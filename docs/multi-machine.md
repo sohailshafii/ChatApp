@@ -162,6 +162,15 @@ Recommend (1) now, (2) if/when we add more periodic work.
    `rate-limit/redis-backend.test.ts` (skipped unless `TEST_REDIS_URL`).
 3. **Half B presence** — presence registry + repoint `dispatchMessagePush`
    offline-detection to it (fixes spurious cross-machine push on its own).
+   **✅ Done** — `ws/presence.ts`: a `Presence` interface with `LocalPresence`
+   (in-memory, the local hub = the fleet at N=1) and `RedisPresence` (a ZSET per
+   account, member = machineId, score = expiry; `online()` prunes stale members
+   then checks `ZCARD`, short-circuiting on the local hub first). Refreshed on WS
+   connect + a `startPresenceHeartbeat` (every 25s, TTL 60s), cleared when a
+   machine's last socket for an account closes. `dispatchMessagePush` now uses
+   `presence.online()`. Real-Redis tests in `ws/presence.test.ts` (skipped unless
+   `TEST_REDIS_URL`). NB: this fixes *push* offline-detection across machines; the
+   live *message* fan-out still needs the bus (phase 4).
 4. **Half B bus** — pub/sub fan-out for human messages, bot streaming, and the
    `delivered` receipt; origin-echo handling.
 5. **Background-job leader lock.**
