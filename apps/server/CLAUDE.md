@@ -353,8 +353,9 @@ resolved by the hub→pub/sub move).
 
 #### Rate limiting
 
-Auth endpoints are rate limited (§6) by a single in-memory primitive in
-`src/rate-limit/`. `signup`, `login`, `verify-email/resend`, and
+Auth endpoints are rate limited (§6) by a single primitive in `src/rate-limit/`
+(in-memory by default; Redis-backed when `REDIS_URL` is set — see "Global caps
+across the fleet" below). `signup`, `login`, `verify-email/resend`, and
 `password-reset/request` are capped **per-IP** (and **per-account** where the
 body carries an identifier) over a 10-minute window; exceeding a cap returns
 **429** with `{"error":{"code":"rate_limited",…}}`. Limits live in `AUTH_LIMITS`.
@@ -369,9 +370,8 @@ header (`sendBackoff`). A **successful login clears the streak**, so an honest
 user who mistyped isn't penalized; only grinding one credential escalates. Keyed
 by the submitted username (unknown usernames included — same generic
 `invalid_credentials`, no enumeration). The per-IP `loginPerIp` volumetric cap
-still bounds an IP sweeping many usernames. Unlike the volume caps, backoff delays
-are **not** `perMachineMax`-divided — each machine applies the full delay. The
-`unverified` branch (correct password) does **not** count as a backoff failure.
+still bounds an IP sweeping many usernames. The `unverified` branch (correct
+password) does **not** count as a backoff failure.
 
 The same primitive also gates **bot invocation**
 (`src/rate-limit/bot-rate-limit.ts`, `BOT_LIMITS`, per `(user, bot)`) and
@@ -386,32 +386,32 @@ so an unbounded caller could enumerate accounts. The route checks it (human peer
 only — bot ids resolve against the in-process registry, not a lookup) **before**
 the DB hit and over the cap returns **429** `rate_limited`.
 
-**Global caps across the fleet.** The numbers in `AUTH_LIMITS`/`BOT_LIMITS` are
-**global** (whole-fleet) caps per window, not per-machine. Because the counter is
-**in-memory per process**, N machines each counting independently would otherwise
-let the true cap be N× the intended value (and an attacker just floods — the load
-balancer spreads requests, so they get the extra allowance without knowing N;
-`auto_start_machines` can even raise N under load). To approximate a global cap
-without a shared store, `perMachineMax(globalMax)` (`src/rate-limit/rate-limiter.ts`)
-divides each cap by **`RATE_LIMIT_MACHINE_COUNT`** (env, default 1): each machine
-enforces `ceil(globalMax / N)`, so the fleet sums to ~the global cap.
+**Global caps across the fleet.** The numbers in `AUTH_LIMITS`/`BOT_LIMITS`/etc.
+are **global** (whole-fleet) caps per window. How exactly they're enforced depends
+on the backend, chosen by `REDIS_URL` (`createRateLimiter`/`createFailureBackoff`
+in `src/rate-limit/`):
 
-- **Calculating it.** Set `RATE_LIMIT_MACHINE_COUNT` to the number of machines you
-  run (`fly scale count`). Effective global cap = `N × ceil(G/N)` ≈ `G` — slightly
-  *over* (ceil rounding adds up to `N−1`; a cap `G < N` floors at 1/machine, giving
-  `N`). It's never *under* `G`, so legit users are never wrongly blocked. At one
-  machine (default) the cap is exact. To allow more traffic as capacity grows,
-  raise the global numbers in `AUTH_LIMITS`/`BOT_LIMITS`.
-- **Keep N in sync with reality.** With `auto_start_machines = true`, the *live*
-  machine count can exceed `RATE_LIMIT_MACHINE_COUNT`, weakening the cap — set it
-  to your max provisioned count (or pin `fly scale count`). NB: the in-process WS
-  `hub` already requires effectively one machine until it moves to pub/sub, so v1
-  runs `N = 1` and the cap is exact.
-- **Remaining follow-ups:** the **exact** fix is a shared store (Redis/Postgres
-  atomic counters) which removes the division entirely (and naturally rides the
-  hub→pub/sub move). (The §6 **exponential backoff** for repeated failure now
-  exists for login — see `FailureBackoff` above; the *volumetric* windows are
-  still fixed, which is the right shape for them.)
+- **Redis-backed (`REDIS_URL` set).** Counters are an atomic `INCR`+window-`PEXPIRE`
+  in the shared store (`RedisRateLimiter`, a tiny Lua script), and the login backoff
+  is a Redis hash with a Lua read-modify-write (`RedisFailureBackoff`). Because all
+  machines share one counter, the caps are **exact global caps** no matter how many
+  machines run — this is what makes `N > 1` safe. Redis errors **fail open** (allow
+  the request, logged) rather than lock everyone out. Keys are namespaced `rl:*`
+  (counters) and `bo:*` (backoff), each with a TTL so abandoned windows/streaks
+  expire on their own.
+- **In-memory (`REDIS_URL` unset, the default).** A per-process `Map`
+  (`InMemoryRateLimiter`/`InMemoryFailureBackoff`). Correct **only on a single
+  machine** — which is exactly the constraint v1 runs under (the WS `hub` also
+  forces `N = 1` until it moves to pub/sub). At `N = 1` the global caps are exact.
+
+There is no longer a per-machine division: the old `perMachineMax` /
+`RATE_LIMIT_MACHINE_COUNT` stopgap (which approximated a global cap for the
+in-memory backend at `N > 1`) is **gone**, because we only ever run `N > 1` with
+the Redis backend, where the cap is already global. To allow more traffic, raise
+the numbers in `AUTH_LIMITS`/`BOT_LIMITS`. The volumetric windows are still fixed
+(the right shape for them); §6 exponential backoff covers repeated failure. See
+[`docs/multi-machine.md`](../../docs/multi-machine.md) for the rest of the
+scale-out (the hub→pub/sub move is the remaining blocker for `N > 1`).
 
 #### Conversations & messages (§2/§3/§4)
 

@@ -135,7 +135,7 @@ async function handleSend(
 
   // §3/§6: per-user message-send burst guard. Checked before persisting, so a
   // rate-limited send stores and broadcasts nothing; the socket stays open.
-  if (!messageLimiter.check(messageSendKey(accountId), MESSAGE_LIMITS.send)) {
+  if (!(await messageLimiter.check(messageSendKey(accountId), MESSAGE_LIMITS.send))) {
     sendFrame(
       ws,
       errorFrame('rate_limited', 'Too many messages — slow down', clientMessageId),

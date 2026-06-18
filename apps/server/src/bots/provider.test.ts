@@ -27,7 +27,6 @@ function config(overrides: Partial<Config>): Config {
     openaiModel: 'gpt-4o',
     botDailyTokenBudget: 20000,
     auditRetentionDays: 180,
-    rateLimitMachineCount: 1,
     vapidPublicKey: undefined,
     vapidPrivateKey: undefined,
     vapidSubject: 'mailto:admin@example.com',

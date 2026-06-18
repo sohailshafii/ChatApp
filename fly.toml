@@ -16,13 +16,13 @@ primary_region = "iad"
 [http_service]
   internal_port = 8080
   force_https = true
-  # ⚠️ v1 must run a SINGLE machine: the WebSocket fan-out (ws/hub) and the
-  # rate-limit counters are per-process/in-memory. Running >1 machine silently
-  # breaks cross-machine messaging AND weakens rate limits to N× the cap. If you
-  # do scale out, set RATE_LIMIT_MACHINE_COUNT to the machine count (it divides
-  # the global caps — see "Rate limiting" in apps/server/CLAUDE.md), and move the
-  # hub to a pub/sub layer. auto_start_machines only starts machines you've
-  # provisioned via `fly scale count`, so keeping that at 1 keeps N = 1.
+  # ⚠️ v1 must run a SINGLE machine: the WebSocket fan-out (ws/hub) is
+  # per-process/in-memory, so >1 machine silently breaks cross-machine messaging.
+  # (Rate limits are already fleet-safe when REDIS_URL is set — they share a Redis
+  # counter — but the hub is the remaining blocker.) Moving the hub to a pub/sub
+  # layer is the last step before N>1; see docs/multi-machine.md. auto_start_machines
+  # only starts machines you've provisioned via `fly scale count`, so keeping that
+  # at 1 keeps N = 1.
   auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 0
