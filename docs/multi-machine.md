@@ -146,6 +146,10 @@ Recommend (1) now, (2) if/when we add more periodic work.
 1. **Redis plumbing** — add the client + `REDIS_URL` config (optional, with the
    in-memory fallback wired through a factory), a health check, graceful
    connect/close in `index.ts`. No behavior change; `N = 1` path untouched.
+   **✅ Done** — `src/redis/client.ts` (`ioredis`, lazy-connect, optional via
+   `REDIS_URL`; `getRedis()` returns `null` when unset → in-process fallback;
+   `connectRedis`/`closeRedis` wired into `index.ts`, with a boot-time `PING`).
+   Nothing reads Redis yet.
 2. **Half A** — Redis-backed counters + backoff behind the factory; make the
    limiter API async and `await` at call sites; delete `perMachineMax` /
    `RATE_LIMIT_MACHINE_COUNT`.

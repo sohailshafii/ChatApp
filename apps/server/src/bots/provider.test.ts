@@ -32,6 +32,8 @@ function config(overrides: Partial<Config>): Config {
     vapidPrivateKey: undefined,
     vapidSubject: 'mailto:admin@example.com',
     vapidConfigured: false,
+    redisUrl: undefined,
+    redisConfigured: false,
     cookieSecure: false,
     ...overrides,
   };

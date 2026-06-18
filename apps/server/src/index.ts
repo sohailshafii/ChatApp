@@ -1,6 +1,7 @@
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { closePool } from './db/pool.js';
+import { closeRedis, connectRedis } from './redis/client.js';
 import { startRetentionSweeper } from './auth/retention.js';
 import { startExportWorker } from './auth/export-worker.js';
 
@@ -13,6 +14,7 @@ async function main(): Promise<void> {
     app.log.info({ signal }, 'shutting down');
     for (const stop of background) stop();
     await app.close();
+    await closeRedis();
     await closePool();
     process.exit(0);
   };
@@ -21,6 +23,9 @@ async function main(): Promise<void> {
 
   try {
     await app.listen({ host, port });
+    // Connect the optional shared Redis (multi-machine scale-out); a no-op when
+    // REDIS_URL is unset, non-fatal when it can't connect. See redis/client.ts.
+    await connectRedis(app.log);
     // Start background jobs once we're listening: retention cleanup (§6/§7) and
     // the durable data-export worker (§6).
     background.push(startRetentionSweeper(app.log), startExportWorker(app.log));
