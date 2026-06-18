@@ -2,6 +2,10 @@
 
 A small monorepo for a web chat application. The full v1 spec is in [REQUIREMENTS.md](./REQUIREMENTS.md).
 
+**Status:** v1 complete and deployed — running in production on Fly.io, scaled
+horizontally across multiple machines (Redis/Valkey-backed shared state). See
+[README.md](./README.md) for details.
+
 ## Workspaces
 
 - **`apps/web`** — React + Vite frontend (TypeScript).
