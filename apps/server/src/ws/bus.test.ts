@@ -3,16 +3,20 @@ import { WebSocket } from 'ws';
 import type { ServerWsMessage } from '@chatapp/shared';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { hub } from './hub.js';
-import { deliverFromBus, RedisBus } from './bus.js';
+import { applyControlFromBus, deliverFromBus, RedisBus } from './bus.js';
 
-// A fake socket: open, recording what it's sent.
-function fakeSocket(): WebSocket & { sent: string[] } {
-  const sent: string[] = [];
-  return {
+// A fake socket: open, recording what it's sent and whether it was closed.
+function fakeSocket(): WebSocket & { sent: string[]; closed: boolean } {
+  const s = {
     readyState: WebSocket.OPEN,
-    send: (p: string) => sent.push(p),
-    sent,
-  } as unknown as WebSocket & { sent: string[] };
+    sent: [] as string[],
+    closed: false,
+    send: (p: string) => s.sent.push(p),
+    close: () => {
+      s.closed = true;
+    },
+  };
+  return s as unknown as WebSocket & { sent: string[]; closed: boolean };
 }
 
 const frame: ServerWsMessage = {
@@ -63,6 +67,29 @@ describe('RedisBus.publish (local leg, no client)', () => {
     b.publish(['u1'], frame, origin);
     expect(origin.sent).toEqual([]); // origin tab skipped
     expect(other.sent).toEqual([JSON.stringify(frame)]); // other tab gets it
+  });
+});
+
+describe('closeAccount / applyControlFromBus', () => {
+  it('closeAccount closes local sockets (local leg, no client)', () => {
+    const s = fakeSocket();
+    hub.add('u1', s);
+    new RedisBus(() => null).closeAccount('u1');
+    expect(s.closed).toBe(true);
+  });
+
+  it('a close control from another machine closes local sockets', () => {
+    const s = fakeSocket();
+    hub.add('u1', s);
+    applyControlFromBus(JSON.stringify({ o: 'other', type: 'close', a: 'u1' }), 'me');
+    expect(s.closed).toBe(true);
+  });
+
+  it('ignores a close control this machine published', () => {
+    const s = fakeSocket();
+    hub.add('u1', s);
+    applyControlFromBus(JSON.stringify({ o: 'me', type: 'close', a: 'u1' }), 'me');
+    expect(s.closed).toBe(false);
   });
 });
 

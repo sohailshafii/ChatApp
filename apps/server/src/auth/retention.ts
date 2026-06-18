@@ -3,6 +3,7 @@ import { sweepExpiredSessions } from './sessions.js';
 import { sweepExpiredDataExports } from './data-export.js';
 import { sweepOldAuditEvents } from './audit.js';
 import { sweepExpiredInvites } from './invites.js';
+import { shouldRunJob } from '../redis/leader.js';
 
 // Periodic retention cleanup (§6/§7) — the "delete" half of every expiry policy.
 // Each task prunes one table whose rows the rest of the app already treats as
@@ -13,10 +14,8 @@ import { sweepExpiredInvites } from './invites.js';
 //   - dead invites (expired-unaccepted, or accepted over 30 days ago)
 //
 // Started only from the entrypoint (index.ts), never from buildApp(), so tests
-// don't spin up a timer. In-process and per-machine: each machine runs its own
-// sweep — harmless (the DELETEs are idempotent), but a single scheduled job is
-// the cleaner long-term home, alongside the rate-limit shared-store / hub→pub-sub
-// moves.
+// don't spin up a timer. With Redis (N>1) a leader lock means only one machine
+// sweeps per tick (shouldRunJob); without it, the single machine always sweeps.
 export const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 export type SweepTask = { name: string; sweep: () => Promise<number> };
@@ -41,6 +40,10 @@ export function startRetentionSweeper(
   { intervalMs = RETENTION_SWEEP_INTERVAL_MS, tasks = RETENTION_TASKS }: Options = {},
 ): () => void {
   const run = async (): Promise<void> => {
+    // With Redis, only the leader machine sweeps this tick (idempotent, so this is
+    // just to avoid N machines doing the same deletes). TTL > interval keeps the
+    // holder's leadership stable between ticks.
+    if (!(await shouldRunJob('retention', intervalMs * 2))) return;
     for (const { name, sweep } of tasks) {
       try {
         const deleted = await sweep();

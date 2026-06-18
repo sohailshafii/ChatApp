@@ -248,10 +248,10 @@ every expiry policy (§6/§7): **sessions** (`sweepExpiredSessions`, past the 30
 window), **data_exports** (`sweepExpiredDataExports`, past the 24h download link —
 dead bytea + PII), and **auth_audit_log** (`sweepOldAuditEvents`, older than
 `AUDIT_RETENTION_DAYS`, default 180). A failing task is logged and doesn't stop
-the others. In-process unref'd interval (per-machine; a single scheduled job is
-the cleaner multi-machine home, alongside the rate-limit shared-store / hub→pub-sub
-moves), wired only in the entrypoint so tests using `buildApp()` don't spin a
-timer.
+the others. In-process unref'd interval, wired only in the entrypoint so tests
+using `buildApp()` don't spin a timer. With `REDIS_URL` set (N>1) a per-job leader
+lock (`src/redis/leader.ts` `shouldRunJob`) means only one machine sweeps per tick;
+without it, the single machine always runs.
 
 #### Password reset
 
@@ -300,8 +300,9 @@ no FK), so the peer keeps their history; `resolvePeer` (in
 `conversations/summaries.ts`) then renders the now-missing peer as the synthetic
 `{kind:'human', id:NIL_UUID, username:'Deleted user'}`. Records the
 `account_deletion` audit event **before** the delete (its `account_id` SET-NULLs
-as the row goes), closes the account's live sockets, clears cookies, returns `200`
-empty. Push-subscription cleanup rides a future `accounts ON DELETE CASCADE` FK
+as the row goes), closes the account's live sockets **fleet-wide**
+(`bus.closeAccount` — a `ws:control` message so other machines drop them too),
+clears cookies, returns `200` empty. Push-subscription cleanup rides a future `accounts ON DELETE CASCADE` FK
 (no `push_subscriptions` table yet — upcoming §5 work).
 
 #### Data export (§6)

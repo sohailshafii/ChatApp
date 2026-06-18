@@ -141,6 +141,8 @@ idempotent. Options, cheapest first:
 
 Recommend (1) now, (2) if/when we add more periodic work.
 
+**✅ Done (phase 5):** option (1) via Redis. `src/redis/leader.ts` `shouldRunJob(name, ttlMs)` — an atomic acquire-or-renew Lua lock per job (`joblock:{name}`); the retention sweeper and export worker gate each tick on it (TTL = 2× interval, so the holder keeps leadership and a dead holder's lock expires for another to take over). Without Redis it always returns true (N=1 runs as before); fail-open on Redis error (idempotent, so harmless).
+
 ## Phasing (independent, shippable PRs)
 
 1. **Redis plumbing** — add the client + `REDIS_URL` config (optional, with the
@@ -185,16 +187,23 @@ Recommend (1) now, (2) if/when we add more periodic work.
    N=1, no bus-ack round trip. Tests in `ws/bus.test.ts` (local + real-Redis publish,
    skipped unless `TEST_REDIS_URL`); verified end-to-end with a two-instance smoke
    (message sent on instance A delivered to a socket on instance B over Redis).
-   ⚠️ **Still local-only:** account-deletion socket close (`routes/auth.ts`) only
-   drops the deleted account's sockets on *this* machine — a deleted user with a tab
-   on another machine could keep posting until that socket drops. Close this (a bus
-   control message) **before flipping to N>1** in phase 6.
-5. **Background-job leader lock.**
-6. **Flip the switch** — remove the `N = 1` guardrail in `fly.toml`, set the
-   target scale, update ops docs; provision Redis as a Fly secret (`REDIS_URL`).
+   (The account-deletion socket close that was local-only here is now fleet-wide —
+   see phase 5.)
+5. **Background-job leader lock** + **fleet-wide account-deletion socket close.**
+   **✅ Done** — leader lock as above (`shouldRunJob`). Also added a bus **control**
+   channel (`ws:control`): `bus.closeAccount(id)` closes local sockets and publishes
+   a `close` control message so every machine drops that account's sockets; the
+   account-deletion route uses it. So a deleted user can no longer keep acting from a
+   tab on another machine. (`applyControlFromBus`, tests in `ws/bus.test.ts`;
+   verified with a two-instance smoke.)
+6. **Flip the switch** (turn it on) — provision Redis/Valkey + set `REDIS_URL`, then
+   remove the `N = 1` guardrail in `fly.toml`, set the target scale, update ops docs.
+   All the functional pieces (phases 2–5) are in place; this phase is purely
+   provisioning + configuration.
 
 Phases 2–5 each depend only on phase 1 and can otherwise land in any order; phase
-6 depends on all of them.
+6 depends on all of them. **Phases 1–5 are done** — only phase 6 (provisioning +
+flipping the switch) remains.
 
 ## Open questions
 
