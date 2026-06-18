@@ -73,14 +73,14 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       if (parsed.data.peerKind === 'human') {
         const accountId = request.authUser!.id;
         const overLimit =
-          !usernameLookupLimiter.check(
+          !(await usernameLookupLimiter.check(
             usernameLookupAccountKey(accountId),
             USERNAME_LOOKUP_LIMITS.perAccount,
-          ) ||
-          !usernameLookupLimiter.check(
+          )) ||
+          !(await usernameLookupLimiter.check(
             usernameLookupIpKey(request.ip),
             USERNAME_LOOKUP_LIMITS.perIp,
-          );
+          ));
         if (overLimit) {
           return sendError(
             reply,

@@ -57,13 +57,6 @@ const envSchema = z.object({
   // retention sweeper (operational PII is shorter-lived; audit logs ~180d).
   AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(180),
 
-  // Number of server machines the global rate-limit caps are divided across
-  // (§6). The limiter is per-process/in-memory, so a global cap of G is
-  // approximated by each machine allowing ceil(G / N). Set this to the number of
-  // machines you run (fly scale count). Default 1 (single machine = exact cap).
-  // See the rate-limiting notes in apps/server/CLAUDE.md.
-  RATE_LIMIT_MACHINE_COUNT: z.coerce.number().int().positive().default(1),
-
   // Web Push (§5). Optional in dev: with no keypair, push is disabled (the
   // dispatcher no-ops, the vapid-public-key endpoint errors). Generate with
   // `npx web-push generate-vapid-keys`. Prod gets these from Fly secrets (§6).
@@ -97,7 +90,6 @@ export type Config = {
   openaiModel: string;
   botDailyTokenBudget: number;
   auditRetentionDays: number;
-  rateLimitMachineCount: number;
   vapidPublicKey: string | undefined;
   vapidPrivateKey: string | undefined;
   vapidSubject: string;
@@ -143,7 +135,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     openaiModel: e.OPENAI_MODEL,
     botDailyTokenBudget: e.BOT_DAILY_TOKEN_BUDGET,
     auditRetentionDays: e.AUDIT_RETENTION_DAYS,
-    rateLimitMachineCount: e.RATE_LIMIT_MACHINE_COUNT,
     vapidPublicKey: e.VAPID_PUBLIC_KEY,
     vapidPrivateKey: e.VAPID_PRIVATE_KEY,
     vapidSubject: e.VAPID_SUBJECT,

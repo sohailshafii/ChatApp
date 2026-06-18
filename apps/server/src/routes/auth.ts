@@ -88,7 +88,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     const { username, email, password } = parsed.data;
 
     if (
-      rateLimited(reply, [
+      await rateLimited(reply, [
         { key: ipKey('signup', request.ip), rule: AUTH_LIMITS.signupPerIp },
       ])
     ) {
@@ -191,7 +191,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     // Per-IP volumetric cap bounds an IP sweeping many usernames; the per-account
     // dimension is handled by exponential backoff (§6), below.
     if (
-      rateLimited(reply, [
+      await rateLimited(reply, [
         { key: ipKey('login', request.ip), rule: AUTH_LIMITS.loginPerIp },
       ])
     ) {
@@ -201,7 +201,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     // Exponential backoff on repeated failed logins for this username (§6). While
     // locked out, reject before touching the DB or hashing — no work, no leak.
     const backoffKey = accountKey('login', username);
-    const retryAfter = loginBackoff.retryAfter(backoffKey, LOGIN_BACKOFF);
+    const retryAfter = await loginBackoff.retryAfter(backoffKey, LOGIN_BACKOFF);
     if (retryAfter > 0) {
       return sendBackoff(reply, retryAfter);
     }
@@ -220,7 +220,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       // account is set for a wrong password, undefined for an unknown username.
       // A wrong/unknown credential is the failure that drives backoff (§6); an
       // unknown username is keyed the same way, which doesn't leak existence.
-      loginBackoff.recordFailure(backoffKey, LOGIN_BACKOFF);
+      await loginBackoff.recordFailure(backoffKey, LOGIN_BACKOFF);
       await recordAuthEvent(request.log, 'login_failure', {
         accountId: account?.id ?? null,
         ip: request.ip,
@@ -248,7 +248,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
 
     // A successful login clears any failure streak so an honest user who mistyped
     // a few times isn't carrying a lockout into their next session (§6).
-    loginBackoff.recordSuccess(backoffKey);
+    await loginBackoff.recordSuccess(backoffKey);
 
     const sessionToken = await createSession(account.id);
     reply.setCookie(SESSION_COOKIE_NAME, sessionToken, sessionCookieOptions);
@@ -384,7 +384,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     }
 
     if (
-      rateLimited(reply, [
+      await rateLimited(reply, [
         { key: ipKey('export', request.ip), rule: AUTH_LIMITS.exportPerIp },
         {
           key: accountKey('export', user.id),
@@ -510,7 +510,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     const { email } = parsed.data;
 
     if (
-      rateLimited(reply, [
+      await rateLimited(reply, [
         { key: ipKey('verify-resend', request.ip), rule: AUTH_LIMITS.resendPerIp },
         {
           key: accountKey('verify-resend', email),
@@ -584,7 +584,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     const { identifier } = parsed.data;
 
     if (
-      rateLimited(reply, [
+      await rateLimited(reply, [
         { key: ipKey('reset', request.ip), rule: AUTH_LIMITS.resetPerIp },
         {
           key: accountKey('reset', identifier),

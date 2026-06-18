@@ -43,7 +43,7 @@ export async function streamBotReply(
   // budget_exceeded, the bot_start above lets the client correlate by messageId.
   if (
     human &&
-    !botLimiter.check(botInvocationKey(human, botId), BOT_LIMITS.invoke)
+    !(await botLimiter.check(botInvocationKey(human, botId), BOT_LIMITS.invoke))
   ) {
     broadcastToAccounts(targets, {
       type: 'bot_error',

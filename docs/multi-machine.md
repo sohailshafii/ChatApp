@@ -21,12 +21,12 @@ keep its own copy and they'd silently disagree:
 There's a third, milder issue: **background jobs** (retention sweeper, export
 worker) are started on every machine, so they'd run N times over.
 
-Today's stopgap for (1) is `perMachineMax(global / RATE_LIMIT_MACHINE_COUNT)` —
-each machine enforces a hand-configured fraction of the global cap. It's
-approximate (ceil rounding overshoots), fragile (you must keep
-`RATE_LIMIT_MACHINE_COUNT` in sync with `fly scale count`, and
-`auto_start_machines` can outrun it), and does nothing for (2)/(3). The hub is
-the hard blocker — it has no stopgap, which is why `N = 1` is enforced.
+**Update (phase 2 done):** (1) is now solved when `REDIS_URL` is set — the
+rate-limit counters and login backoff use a shared Redis store, so the caps are
+exact global caps across machines (the old `perMachineMax` /
+`RATE_LIMIT_MACHINE_COUNT` per-machine-division stopgap has been removed). The
+**hub (2)** is now the hard blocker — it has no stopgap, which is why `N = 1` is
+still enforced. (3) is unchanged.
 
 ## Decision: back both halves with Redis
 
@@ -153,6 +153,13 @@ Recommend (1) now, (2) if/when we add more periodic work.
 2. **Half A** — Redis-backed counters + backoff behind the factory; make the
    limiter API async and `await` at call sites; delete `perMachineMax` /
    `RATE_LIMIT_MACHINE_COUNT`.
+   **✅ Done** — `RateLimiter`/`FailureBackoff` are async interfaces with
+   `InMemory*` and `Redis*` backends, picked by `REDIS_URL` via
+   `createRateLimiter`/`createFailureBackoff`. Redis counters = atomic
+   `INCR`+`PEXPIRE` Lua (`rl:*`); backoff = a Redis hash with a Lua RMW (`bo:*`);
+   both fail open on Redis errors. `perMachineMax`/`RATE_LIMIT_MACHINE_COUNT`
+   removed (caps are now exact global). Real-Redis tests in
+   `rate-limit/redis-backend.test.ts` (skipped unless `TEST_REDIS_URL`).
 3. **Half B presence** — presence registry + repoint `dispatchMessagePush`
    offline-detection to it (fixes spurious cross-machine push on its own).
 4. **Half B bus** — pub/sub fan-out for human messages, bot streaming, and the

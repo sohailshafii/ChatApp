@@ -1,11 +1,12 @@
 import type { FastifyReply } from 'fastify';
 import { sendError } from '../http/errors.js';
-import { RateLimiter, perMachineMax, type RateLimitRule } from './rate-limiter.js';
-import { FailureBackoff, type BackoffRule } from './backoff.js';
+import { createRateLimiter, type RateLimitRule } from './rate-limiter.js';
+import { createFailureBackoff, type BackoffRule } from './backoff.js';
 
 // One limiter instance for all auth endpoints (§6). Exported so tests can reset
-// it between cases.
-export const authLimiter = new RateLimiter();
+// it between cases. createRateLimiter picks the Redis or in-memory backend by
+// REDIS_URL — call sites just await check().
+export const authLimiter = createRateLimiter();
 
 // Failure-driven exponential backoff for repeated *failed logins* (§6) — the
 // "exponential backoff on repeated failure" the spec asks for, keyed per account.
@@ -14,11 +15,9 @@ export const authLimiter = new RateLimiter();
 // an attacker grinding one credential is locked out for geometrically longer. The
 // per-IP volumetric cap (loginPerIp, below) still bounds an IP sweeping many
 // usernames. Exported so tests can reset it between cases.
-export const loginBackoff = new FailureBackoff();
+export const loginBackoff = createFailureBackoff();
 
-// 3 free attempts (typos), then lock 1s, 2s, 4s … doubling up to 15 min. Caps are
-// NOT per-machine-divided: backoff is a per-key escalation, not a fleet-summed
-// volume, so each machine should apply the full delay independently.
+// 3 free attempts (typos), then lock 1s, 2s, 4s … doubling up to 15 min.
 export const LOGIN_BACKOFF: BackoffRule = {
   freeRetries: 3,
   baseMs: 1_000,
@@ -26,12 +25,9 @@ export const LOGIN_BACKOFF: BackoffRule = {
 };
 
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
-// The number passed here is the GLOBAL (whole-fleet) cap per window; perMachineMax
-// divides it across RATE_LIMIT_MACHINE_COUNT for this in-memory limiter.
-const perWindow = (globalMax: number): RateLimitRule => ({
-  max: perMachineMax(globalMax),
-  windowMs: WINDOW_MS,
-});
+// GLOBAL (whole-fleet) cap per window — exact with the Redis backend, and exact at
+// N=1 with the in-memory backend (the only way we run without Redis).
+const perWindow = (max: number): RateLimitRule => ({ max, windowMs: WINDOW_MS });
 
 // Per-IP and per-account GLOBAL allowances for the auth endpoints §6 calls out
 // (signup, login, password reset, verification resend). Tuned to bound abuse
@@ -73,14 +69,14 @@ export function sendBackoff(reply: FastifyReply, retryAfterMs: number): FastifyR
 }
 
 // Applies each (key, rule) check in order. On the first breach it sends a 429
-// rate_limited response and returns true, signalling the caller to stop. Returns
+// rate_limited response and resolves true, signalling the caller to stop. Resolves
 // false when every check is within limits.
-export function rateLimited(
+export async function rateLimited(
   reply: FastifyReply,
   checks: ReadonlyArray<{ key: string; rule: RateLimitRule }>,
-): boolean {
+): Promise<boolean> {
   for (const { key, rule } of checks) {
-    if (!authLimiter.check(key, rule)) {
+    if (!(await authLimiter.check(key, rule))) {
       sendError(
         reply,
         'rate_limited',

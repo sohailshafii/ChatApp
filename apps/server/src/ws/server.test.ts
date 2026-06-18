@@ -328,7 +328,7 @@ describe('WebSocket messaging (§3)', () => {
     const conv = await createConversation(alice.id, bob.id);
     // Saturate alice's send window directly (avoids sending 30 frames).
     for (let i = 0; i < MESSAGE_LIMITS.send.max; i++) {
-      messageLimiter.check(messageSendKey(alice.id), MESSAGE_LIMITS.send);
+      await messageLimiter.check(messageSendKey(alice.id), MESSAGE_LIMITS.send);
     }
     const a = connect(alice.token);
     await a.opened();
@@ -468,7 +468,7 @@ describe('WebSocket bot replies (§3)', () => {
     const alice = await createUser('alice');
     // Saturate the (user, bot) window directly so we don't send 20 WS frames.
     const key = botInvocationKey(alice.id, 'assistant');
-    for (let i = 0; i < BOT_LIMITS.invoke.max; i++) botLimiter.check(key, BOT_LIMITS.invoke);
+    for (let i = 0; i < BOT_LIMITS.invoke.max; i++) await botLimiter.check(key, BOT_LIMITS.invoke);
 
     const conv = await createBotConversation(alice.id, 'assistant');
     const a = connect(alice.token);
