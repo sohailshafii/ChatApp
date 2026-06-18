@@ -174,6 +174,9 @@ export async function startMessageBus(
   await sub.subscribe(CHANNEL, CONTROL_CHANNEL);
   log.info('ws bus subscribed');
   return () => {
-    void sub.quit();
+    // quit() rejects with "Connection is closed" if the socket is already gone
+    // (common on SIGTERM). Swallow it and hard-disconnect — an unhandled rejection
+    // here would crash the process during shutdown.
+    sub.quit().catch(() => sub.disconnect());
   };
 }
