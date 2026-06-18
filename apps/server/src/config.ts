@@ -70,6 +70,14 @@ const envSchema = z.object({
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().default('mailto:admin@example.com'),
+
+  // Multi-machine scale-out (docs/multi-machine.md). Optional: when unset, the
+  // rate-limit counters and WS hub stay in-process (the single-machine default,
+  // N=1) — same "optional infra" posture as RESEND/VAPID/bot keys, so local dev
+  // and tests run with no Redis. When set, it's the connection string for the
+  // shared Redis/Valkey backing those (phases land incrementally; this is just
+  // the phase-1 plumbing, so a set URL connects but nothing uses it yet).
+  REDIS_URL: z.string().optional(),
 });
 
 export type Config = {
@@ -95,6 +103,10 @@ export type Config = {
   vapidSubject: string;
   // True only when the full VAPID keypair is present; gates Web Push (§5).
   vapidConfigured: boolean;
+  redisUrl: string | undefined;
+  // True when REDIS_URL is set; selects the (future) Redis-backed limiters/hub
+  // over the in-process fallbacks. See docs/multi-machine.md.
+  redisConfigured: boolean;
   // Whether auth cookies get the Secure attribute. Derived from APP_BASE_URL's
   // scheme: off for local http dev, on for https (prod). See §6.
   cookieSecure: boolean;
@@ -136,6 +148,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     vapidPrivateKey: e.VAPID_PRIVATE_KEY,
     vapidSubject: e.VAPID_SUBJECT,
     vapidConfigured: Boolean(e.VAPID_PUBLIC_KEY && e.VAPID_PRIVATE_KEY),
+    redisUrl: e.REDIS_URL,
+    redisConfigured: Boolean(e.REDIS_URL),
     cookieSecure: e.APP_BASE_URL.startsWith('https'),
   };
   return cached;
