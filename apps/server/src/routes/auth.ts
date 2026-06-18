@@ -46,7 +46,7 @@ import { recordAuthEvent } from '../auth/audit.js';
 import { isInviteOnly, hasPendingInvite, consumeInvite } from '../auth/invites.js';
 import { deleteAccount } from '../auth/account.js';
 import { enqueueExport } from '../auth/data-export.js';
-import { hub } from '../ws/hub.js';
+import { bus } from '../ws/bus.js';
 import { loadConfig } from '../config.js';
 
 // Postgres unique-violation error code.
@@ -350,11 +350,9 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     });
     await deleteAccount(user.id);
 
-    // Best-effort: drop the account's live sockets (its sessions are already
-    // gone, so they could not re-authenticate anyway).
-    for (const socket of hub.socketsForAccount(user.id)) {
-      socket.close();
-    }
+    // Best-effort: drop the account's live sockets across the whole fleet (its
+    // sessions are already gone, so they could not re-authenticate anyway).
+    bus.closeAccount(user.id);
 
     clearAuthCookies(reply);
     return reply.code(200).send();

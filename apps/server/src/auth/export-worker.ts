@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { processPendingExports } from './data-export.js';
+import { shouldRunJob } from '../redis/leader.js';
 
 // Background worker that turns durably-enqueued export jobs (§6) into ready
 // archives. Polls for `pending` rows, so a job survives a crash/redeploy: the
@@ -22,6 +23,9 @@ export function startExportWorker(
   { intervalMs = EXPORT_WORKER_INTERVAL_MS, process = processPendingExports }: Options = {},
 ): () => void {
   const run = async (): Promise<void> => {
+    // With Redis, only the leader machine drains jobs this tick (the DB claim is
+    // SKIP-LOCKED-safe regardless; this just avoids N machines polling).
+    if (!(await shouldRunJob('export-worker', intervalMs * 2))) return;
     try {
       const done = await process(log);
       if (done > 0) log.info({ done }, 'processed export jobs');
