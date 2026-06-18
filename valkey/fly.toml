@@ -1,0 +1,18 @@
+# Self-run Valkey app for the multi-machine scale-out (docs/multi-machine.md).
+# Private-only: NO [http_service]/[[services]] block, so Fly allocates no public IP
+# and it's reachable only over the org's private 6PN network at <app>.internal:6379.
+#
+# Like the main app's fly.toml, `app` is a generic placeholder so this stays a
+# public template — deploy with `-a <your-valkey-app>` to override it. See README.md.
+app = "chatapp-valkey"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Single machine. Keep it pinned (no autoscaling): one Valkey instance, no
+# clustering. Memory is small — our keyspace is just counters/presence/pub-sub.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpus = 1
