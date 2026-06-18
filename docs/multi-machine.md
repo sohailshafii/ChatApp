@@ -173,6 +173,22 @@ Recommend (1) now, (2) if/when we add more periodic work.
    live *message* fan-out still needs the bus (phase 4).
 4. **Half B bus** — pub/sub fan-out for human messages, bot streaming, and the
    `delivered` receipt; origin-echo handling.
+   **✅ Done** — `ws/bus.ts`: a `MessageBus` (`LocalBus` / `RedisBus` by
+   `REDIS_URL`). `publish()` writes to local sockets immediately and, on Redis,
+   PUBLISHes an envelope tagged with the origin machine id to one `ws:bus` channel;
+   each machine's subscriber (`startMessageBus` in `index.ts`) delivers foreign
+   frames to its local sockets via `deliverFromBus`, skipping its own echo. The
+   origin socket is always local, so the "skip the sender's originating tab" is a
+   local-only concern (no connection-id on the wire). `broadcastToAccounts` (bot
+   streaming) routes through the bus unchanged. **`delivered`** resolved to the
+   **presence heuristic** (peer online ⇒ delivered) — equals the old behavior at
+   N=1, no bus-ack round trip. Tests in `ws/bus.test.ts` (local + real-Redis publish,
+   skipped unless `TEST_REDIS_URL`); verified end-to-end with a two-instance smoke
+   (message sent on instance A delivered to a socket on instance B over Redis).
+   ⚠️ **Still local-only:** account-deletion socket close (`routes/auth.ts`) only
+   drops the deleted account's sockets on *this* machine — a deleted user with a tab
+   on another machine could keep posting until that socket drops. Close this (a bus
+   control message) **before flipping to N>1** in phase 6.
 5. **Background-job leader lock.**
 6. **Flip the switch** — remove the `N = 1` guardrail in `fly.toml`, set the
    target scale, update ops docs; provision Redis as a Fly secret (`REDIS_URL`).
@@ -183,10 +199,14 @@ Phases 2–5 each depend only on phase 1 and can otherwise land in any order; ph
 ## Open questions
 
 - **Presence tuning** — heartbeat interval vs. TTL (responsiveness vs. Redis
-  write rate).
-- **`delivered` fidelity** — exact bus-ack vs. presence heuristic (above).
-- **Upstash cost** — per-`PUBLISH`/`SUBSCRIBE`/`INCR` pricing at expected message
-  volume; may favor a dedicated Fly Redis over per-command Upstash.
+  write rate). Currently 25s heartbeat / 60s TTL.
+- ~~**`delivered` fidelity**~~ — resolved: presence heuristic (phase 4).
+- **Bus efficiency** — phase 4 uses one `ws:bus` channel, so every machine
+  receives every published frame. Fine at small N; if it matters, move to
+  per-account channels (subscribe/unsubscribe as sockets come/go) or conditional
+  publish via presence. Not needed for v1 scale-out.
+- **Upstash cost** — per-command pricing at expected message volume; favors a
+  dedicated Fly Redis/Valkey over per-command Upstash (the current lean).
 - **Managed choice** — Upstash Redis vs. Fly Redis/Valkey (an ops call at
   provisioning).
 

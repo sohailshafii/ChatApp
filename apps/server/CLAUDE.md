@@ -469,15 +469,23 @@ clientMessageId, content}`; the server:
   `clientMessageId`),
 - fans the message out to the other participant sockets **and the sender's other
   tabs** as **`message`** (with `clientMessageId` nulled),
-- sends the sender a **`delivered`** receipt when a human peer socket received it,
+- sends the sender a **`delivered`** receipt when a human peer is online (a live
+  socket somewhere on the fleet, via presence),
 - returns **`error{code, clientMessageId}`** on a bad/forbidden frame (the socket
   stays open).
 
 Messages get a server-assigned `createdAt` (the §3 ordering key) and are
 idempotent on `(sender_id, clientMessageId)` — a retry re-acks the same message
 without duplicating or re-broadcasting. Live sockets are tracked per account in
-`src/ws/hub.ts` (in-process; move behind a pub/sub before running multiple
-machines). A send into a **bot** conversation streams a reply: after the user
+`src/ws/hub.ts` (per-process), and fan-out goes through the **message bus**
+(`src/ws/bus.ts`): in-memory at N=1, or Redis pub/sub when `REDIS_URL` is set, so a
+message reaches the recipient's sockets on *any* machine. The publisher delivers to
+its own local sockets directly and tags the published envelope with its machine id
+so it ignores its own echo on receipt (bot streams to a local user thus never make
+the Redis round trip on delivery). Fan-out is best-effort (persist-before-fan-out +
+reconnect backfill self-heal). The `delivered` receipt uses presence as the
+cross-machine signal (an exact bus-ack was the alternative; see
+[`docs/multi-machine.md`](../../docs/multi-machine.md)). A send into a **bot** conversation streams a reply: after the user
 message is persisted + acked, the orchestrator (`src/bots/orchestrator.ts`) emits
 `bot_start` → `bot_chunk*` → `bot_end` (or `bot_error{code}`) and persists the
 reply as a message from the bot. Replies come from a pluggable provider
