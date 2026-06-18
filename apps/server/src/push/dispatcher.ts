@@ -1,6 +1,6 @@
 import type { PushPayload } from '@chatapp/shared';
 import { getBot } from '../bots/registry.js';
-import { hub } from '../ws/hub.js';
+import { presence } from '../ws/presence.js';
 import { query } from '../db/pool.js';
 import { appLog } from '../log.js';
 import { listSubscriptions, deleteByEndpoint } from './subscriptions.js';
@@ -11,10 +11,11 @@ import { getPushSender, isPushConfigured } from './sender.js';
 // still get notified. Unified for human and bot messages: `senderId` is a human
 // account id (title = username) or a bot slug (title = bot name).
 //
-// Offline = no socket for that account on THIS process (the in-process hub). With
-// multiple machines a recipient connected elsewhere looks offline and would get a
-// spurious push — acceptable for single-machine v1, resolved by the hub→pub/sub
-// move. Best-effort and fire-and-forget: never throws.
+// Offline = no live socket for that account on ANY machine, via cross-machine
+// presence (ws/presence.ts). With the in-memory backend (N=1) that's just the
+// local hub; with Redis it spans the fleet, so a recipient connected to another
+// machine is correctly seen as online and not spuriously pushed. Best-effort and
+// fire-and-forget: never throws.
 
 const PREVIEW_MAX = 100; // ~100-char notification body
 
@@ -30,9 +31,11 @@ export async function dispatchMessagePush(
 ): Promise<void> {
   if (!isPushConfigured()) return;
   try {
-    const recipients = participantAccountIds.filter(
-      (id) => id !== message.senderId && hub.socketsForAccount(id).size === 0,
-    );
+    const recipients: string[] = [];
+    for (const id of participantAccountIds) {
+      if (id === message.senderId) continue;
+      if (!(await presence.online(id))) recipients.push(id);
+    }
     if (recipients.length === 0) return;
 
     const payload: PushPayload = {

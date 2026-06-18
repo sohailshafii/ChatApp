@@ -13,6 +13,7 @@ import {
 import { loadConfig } from '../config.js';
 import { touchSession } from '../auth/sessions.js';
 import { hub } from './hub.js';
+import { presence } from './presence.js';
 import {
   createMessage,
   getConversationParticipants,
@@ -88,9 +89,17 @@ async function authenticateUpgrade(
 
 function onConnection(ws: WebSocket, accountId: string): void {
   hub.add(accountId, ws);
+  void presence.refresh(accountId);
   ws.on('message', (data) => void handleFrame(ws, accountId, data));
-  ws.on('close', () => hub.remove(accountId, ws));
-  ws.on('error', () => hub.remove(accountId, ws));
+  ws.on('close', () => void onSocketGone(accountId, ws));
+  ws.on('error', () => void onSocketGone(accountId, ws));
+}
+
+// Drop the socket from the local hub and, once this machine holds no more sockets
+// for the account, clear its cross-machine presence (the TTL covers a crash).
+async function onSocketGone(accountId: string, ws: WebSocket): Promise<void> {
+  hub.remove(accountId, ws);
+  if (hub.socketsForAccount(accountId).size === 0) await presence.clear(accountId);
 }
 
 async function handleFrame(

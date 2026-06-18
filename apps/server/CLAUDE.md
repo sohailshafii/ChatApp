@@ -341,15 +341,19 @@ state-changing ones CSRF-gated): `GET /push/vapid-public-key` (the
 `push_subscription_added`), `DELETE /push/subscriptions` (own only, 204, audits
 `push_subscription_removed`). The **dispatcher** (`src/push/dispatcher.ts`,
 `dispatchMessagePush`) fires fire-and-forget from `ws/server.ts` (human messages)
-and the bot orchestrator after `bot_end`: for each recipient with **no live socket
-in the `hub`**, it sends `pushPayloadSchema` `{title, body, conversationId}` (title
-= sender username or bot name) to their subscriptions via `web-push`
-(`src/push/sender.ts`; `setPushSender` is a test seam), **pruning** any that return
-404/410. **VAPID keys are optional** (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/
-`VAPID_SUBJECT`); with none, push is disabled (dispatcher no-ops, the key endpoint
-errors) — like the email/bot-key stubs. Offline detection is **per-process** (the
-in-process hub — a recipient on another machine looks offline → a spurious push;
-resolved by the hub→pub/sub move).
+and the bot orchestrator after `bot_end`: for each recipient the **presence layer**
+reports **offline** (`ws/presence.ts` — `online()`), it sends `pushPayloadSchema`
+`{title, body, conversationId}` (title = sender username or bot name) to their
+subscriptions via `web-push` (`src/push/sender.ts`; `setPushSender` is a test seam),
+**pruning** any that return 404/410. **VAPID keys are optional**
+(`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`); with none, push is disabled
+(dispatcher no-ops, the key endpoint errors) — like the email/bot-key stubs. Offline
+detection is **cross-machine** via presence: in-memory (the local hub) when
+`REDIS_URL` is unset, or a Redis ZSET keyed per account (member = machineId, TTL
+refreshed by a heartbeat) when set — so a recipient connected to another machine is
+correctly seen as online and not spuriously pushed. The live cross-machine *message*
+fan-out (the hub→pub/sub bus) is the remaining `N > 1` blocker — see
+[`docs/multi-machine.md`](../../docs/multi-machine.md).
 
 #### Rate limiting
 
