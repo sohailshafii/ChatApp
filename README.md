@@ -40,6 +40,8 @@ ever flips.
 
 A hobby instance runs on Fly.io: **https://furiousnacho-chat.fly.dev**
 
+![Furious Nacho, the ChatApp mascot, erupting in lightning while football fans flee a living room](./docs/images/furious-nacho-cover.jpg)
+
 > ⚠️ **Best-effort demo — may be down at any time.** It runs on auto-stopping
 > machines, so it can be cold-starting (a few seconds on first request),
 > temporarily down, or taken offline without notice. Don't rely on it.
