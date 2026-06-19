@@ -501,10 +501,13 @@ prompt is below the cache minimum). A provider failure throws a `BotError` whose
 `provider_unavailable` (upstream/model error), `budget_exceeded` (§cost token
 budget, below), or `internal_error` (anything else).
 
-**Token budget (§cost).** Each user has a per-UTC-day bot token budget
-(`BOT_DAILY_TOKEN_BUDGET`, default 20,000; input + output) tracked in the
-`bot_usage` table (migration 007, one counter row per account/day) via
-`src/bots/budget.ts`. The orchestrator **checks before** the model call — if the
+**Token budget (§cost).** Each user has a bot token budget counted over a fixed
+**5-hour window** (`BOT_TOKEN_BUDGET`, default 20,000; input + output) tracked in
+the `bot_usage` table (migration 013, one counter row per account/window, keyed by
+the 5-hour-aligned `window_start`) via `src/bots/budget.ts`. The window aligns to
+epoch boundaries (so it resets on fixed wall-clock instants regardless of server
+TZ), echoing how the major LLM providers reset usage every few hours rather than
+daily. The orchestrator **checks before** the model call — if the
 human participant is at/over the cap it emits `bot_error{code:'budget_exceeded'}`
 (after `bot_start`, so the client correlates it by messageId) and persists
 nothing — and **records after** a successful reply, adding the provider-reported
@@ -513,7 +516,7 @@ usage (`streamReply` returns `BotUsage` after its deltas: Anthropic
 estimate). Soft fixed-window like the auth rate-limiter: the reply that crosses
 the cap completes, the next is blocked; counters persist across restarts.
 
-**Invocation rate limit (§3/§6).** Separate from the daily token budget, a
+**Invocation rate limit (§3/§6).** Separate from the token budget, a
 per-`(user, bot)` burst guard caps how fast bot replies can be requested
 (`src/rate-limit/bot-rate-limit.ts`, `BOT_LIMITS.invoke` = 20/60s placeholder,
 reusing the shared `RateLimiter`). Checked in the orchestrator **before** the

@@ -54,7 +54,8 @@ export async function streamBotReply(
     return;
   }
 
-  // §cost: block once the user is over their per-day token budget. The bot_start
+  // §cost: block once the user is over their token budget (a fixed 5-hour
+  // window; see bots/budget.ts). The bot_start
   // above means the client correlates this rejection by messageId like any other
   // bot_error. Nothing is sent to the model and no message is persisted.
   if (human && (await isOverBudget(human))) {

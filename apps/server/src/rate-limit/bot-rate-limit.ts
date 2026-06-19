@@ -1,7 +1,7 @@
 import { createRateLimiter, type RateLimitRule } from './rate-limiter.js';
 
 // Per-user/per-bot invocation rate limit (§3/§6) — a burst guard on bot replies,
-// separate from the per-day token budget (§cost, see src/bots/budget.ts). Reuses
+// separate from the token budget (§cost, see src/bots/budget.ts). Reuses
 // the shared fixed-window primitive (Redis or in-memory by REDIS_URL). Exported so
 // tests can saturate/reset it, like `authLimiter`.
 export const botLimiter = createRateLimiter();
