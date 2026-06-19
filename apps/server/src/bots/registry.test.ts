@@ -20,6 +20,7 @@ describe('bot registry', () => {
     expect(byId.get('bob')?.name).toBe('Bob');
     expect(byId.get('barbara')?.name).toBe('Barbara');
     expect(byId.get('big-mike')?.name).toBe('Big Mike');
+    expect(byId.get('furious-nacho')?.name).toBe('Furious Nacho');
   });
 
   it('returns a per-bot persona prompt for each known bot', () => {
@@ -28,6 +29,7 @@ describe('bot registry', () => {
     expect(systemPromptFor('bob').toLowerCase()).toContain('mechanic');
     expect(systemPromptFor('barbara').toLowerCase()).toContain('farm');
     expect(systemPromptFor('big-mike').toLowerCase()).toContain('bbq');
+    expect(systemPromptFor('furious-nacho').toLowerCase()).toContain('tortilla');
   });
 
   it('falls back to a generic prompt for an unknown bot', () => {

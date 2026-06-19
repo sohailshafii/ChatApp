@@ -4,6 +4,7 @@ import smith from './smith.svg';
 import bob from './bob.svg';
 import barbara from './barbara.svg';
 import bigMike from './big-mike.svg';
+import furiousNacho from './furious-nacho.png';
 
 // Bundled custom avatar images (§2), swappable in code — no server involved.
 // To add one: drop an image in src/avatars/, import it here, and map it by peer
@@ -16,6 +17,7 @@ const BOT_IMAGES: Record<string, string> = {
   bob, // Bob — old mechanic with a mustache
   barbara, // Barbara — 19th-century grandma with a silver bun and spectacles
   'big-mike': bigMike, // Big Mike — cul-de-sac party host in a ball cap
+  'furious-nacho': furiousNacho, // Furious Nacho — perpetually enraged tortilla chip
 };
 
 // Specific humans could be mapped by id later (e.g. HUMAN_IMAGES[peer.id]).
