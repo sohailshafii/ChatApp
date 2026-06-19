@@ -1,10 +1,10 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { query, closePool } from '../db/pool.js';
 import {
-  DAILY_TOKEN_BUDGET,
+  TOKEN_BUDGET,
   isOverBudget,
   recordUsage,
-  tokensUsedToday,
+  tokensUsedInWindow,
 } from './budget.js';
 
 let accountId: string;
@@ -27,37 +27,42 @@ afterAll(async () => {
 
 describe('bot token budget', () => {
   it('starts at zero and is under budget', async () => {
-    expect(await tokensUsedToday(accountId)).toBe(0);
+    expect(await tokensUsedInWindow(accountId)).toBe(0);
     expect(await isOverBudget(accountId)).toBe(false);
   });
 
-  it('recordUsage inserts then accumulates within the day', async () => {
+  it('recordUsage inserts then accumulates within the window', async () => {
     await recordUsage(accountId, 100);
-    expect(await tokensUsedToday(accountId)).toBe(100);
+    expect(await tokensUsedInWindow(accountId)).toBe(100);
     await recordUsage(accountId, 250);
-    expect(await tokensUsedToday(accountId)).toBe(350);
+    expect(await tokensUsedInWindow(accountId)).toBe(350);
   });
 
   it('ignores a non-positive delta', async () => {
     await recordUsage(accountId, 0);
     await recordUsage(accountId, -5);
-    expect(await tokensUsedToday(accountId)).toBe(0);
+    expect(await tokensUsedInWindow(accountId)).toBe(0);
   });
 
   it('is over budget once usage reaches the cap', async () => {
-    await recordUsage(accountId, DAILY_TOKEN_BUDGET - 1);
+    await recordUsage(accountId, TOKEN_BUDGET - 1);
     expect(await isOverBudget(accountId)).toBe(false);
     await recordUsage(accountId, 1);
     expect(await isOverBudget(accountId)).toBe(true);
   });
 
-  it('only counts today (yesterday does not carry over)', async () => {
+  it('only counts the current window (a prior window does not carry over)', async () => {
+    // Seed a saturated counter in the previous 5-hour window.
     await query(
-      `INSERT INTO bot_usage (account_id, usage_date, tokens_used)
-       VALUES ($1, ((now() AT TIME ZONE 'utc')::date - 1), $2)`,
-      [accountId, DAILY_TOKEN_BUDGET * 2],
+      `INSERT INTO bot_usage (account_id, window_start, tokens_used)
+       VALUES (
+         $1,
+         to_timestamp(floor(extract(epoch from now()) / 18000) * 18000) - interval '5 hours',
+         $2
+       )`,
+      [accountId, TOKEN_BUDGET * 2],
     );
-    expect(await tokensUsedToday(accountId)).toBe(0);
+    expect(await tokensUsedInWindow(accountId)).toBe(0);
     expect(await isOverBudget(accountId)).toBe(false);
   });
 });

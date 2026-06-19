@@ -14,7 +14,7 @@ import {
   type BotProvider,
   type BotUsage,
 } from '../bots/provider.js';
-import { DAILY_TOKEN_BUDGET } from '../bots/budget.js';
+import { TOKEN_BUDGET } from '../bots/budget.js';
 import {
   botLimiter,
   botInvocationKey,
@@ -431,13 +431,13 @@ describe('WebSocket bot replies (§3)', () => {
     expect(err.code).toBe('internal_error');
   });
 
-  it('blocks with budget_exceeded when the user is over their daily budget', async () => {
+  it('blocks with budget_exceeded when the user is over their token budget', async () => {
     const alice = await createUser('alice');
-    // Pre-seed today's usage at the cap.
+    // Pre-seed the current window's usage at the cap.
     await query(
-      `INSERT INTO bot_usage (account_id, usage_date, tokens_used)
-       VALUES ($1, (now() AT TIME ZONE 'utc')::date, $2)`,
-      [alice.id, DAILY_TOKEN_BUDGET],
+      `INSERT INTO bot_usage (account_id, window_start, tokens_used)
+       VALUES ($1, to_timestamp(floor(extract(epoch from now()) / 18000) * 18000), $2)`,
+      [alice.id, TOKEN_BUDGET],
     );
     const conv = await createBotConversation(alice.id, 'assistant');
     const a = connect(alice.token);
@@ -461,7 +461,7 @@ describe('WebSocket bot replies (§3)', () => {
       'SELECT tokens_used FROM bot_usage WHERE account_id = $1',
       [alice.id],
     );
-    expect(Number(used.rows[0]!.tokens_used)).toBe(DAILY_TOKEN_BUDGET);
+    expect(Number(used.rows[0]!.tokens_used)).toBe(TOKEN_BUDGET);
   });
 
   it('blocks with rate_limited once the per-bot invocation window is full', async () => {
@@ -495,7 +495,7 @@ describe('WebSocket bot replies (§3)', () => {
     expect(used.rows[0]!.n).toBe(0);
   });
 
-  it('records the reply token usage against the daily budget', async () => {
+  it('records the reply token usage against the token budget', async () => {
     setBotProvider(usageProvider('hi there', { inputTokens: 3, outputTokens: 5 }));
     const alice = await createUser('alice');
     const conv = await createBotConversation(alice.id, 'assistant');

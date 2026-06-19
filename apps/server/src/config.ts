@@ -50,8 +50,9 @@ const envSchema = z.object({
   // Overridable so a cheaper model can be set without a code change.
   ANTHROPIC_MODEL: z.string().default('claude-opus-4-8'),
   OPENAI_MODEL: z.string().default('gpt-4o'),
-  // §cost: per-user/day token guardrail for bot replies (input + output).
-  BOT_DAILY_TOKEN_BUDGET: z.coerce.number().int().nonnegative().default(20000),
+  // §cost: per-user token guardrail for bot replies (input + output), counted
+  // over a fixed 5-hour window (see bots/budget.ts).
+  BOT_TOKEN_BUDGET: z.coerce.number().int().nonnegative().default(20000),
 
   // §6 retention: auth audit events are kept this many days, then pruned by the
   // retention sweeper (operational PII is shorter-lived; audit logs ~180d).
@@ -88,7 +89,7 @@ export type Config = {
   openaiApiKey: string | undefined;
   anthropicModel: string;
   openaiModel: string;
-  botDailyTokenBudget: number;
+  botTokenBudget: number;
   auditRetentionDays: number;
   vapidPublicKey: string | undefined;
   vapidPrivateKey: string | undefined;
@@ -133,7 +134,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     openaiApiKey: e.OPENAI_API_KEY,
     anthropicModel: e.ANTHROPIC_MODEL,
     openaiModel: e.OPENAI_MODEL,
-    botDailyTokenBudget: e.BOT_DAILY_TOKEN_BUDGET,
+    botTokenBudget: e.BOT_TOKEN_BUDGET,
     auditRetentionDays: e.AUDIT_RETENTION_DAYS,
     vapidPublicKey: e.VAPID_PUBLIC_KEY,
     vapidPrivateKey: e.VAPID_PRIVATE_KEY,
